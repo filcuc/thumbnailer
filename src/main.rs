@@ -3,6 +3,7 @@ mod thumbnailer {
     use std::io::BufReader;
     use std::path::PathBuf;
 
+    #[derive(Copy, Clone)]
     pub enum ThumbSize {
         Normal,
         Large,
@@ -16,7 +17,7 @@ mod thumbnailer {
             }
         }
 
-        fn dir_name(&self) -> &'static str {
+        pub fn name(&self) -> &'static str {
             match self {
                 ThumbSize::Normal => "normal",
                 ThumbSize::Large => "large",
@@ -65,7 +66,7 @@ mod thumbnailer {
 
         fn calculate_destination(mut thumbnailer: Thumbnailer) -> Result<Thumbnailer, String> {
             let filename = Thumbnailer::calculate_path_md5(&thumbnailer.source_path) + ".png";
-            thumbnailer.destination_path = thumbnailer.cache_path.join(thumbnailer.image_size.dir_name()).join(filename);
+            thumbnailer.destination_path = thumbnailer.cache_path.join(thumbnailer.image_size.name()).join(filename);
             println!(
                 "Saving thumb in {}",
                 thumbnailer.destination_path.to_str().unwrap()
@@ -95,7 +96,7 @@ const USAGE: &'static str = "
 Thumbnailer.
 
 Usage:
-  thumbnailer [--verbose] [--recursive] (--small|--large) (--output=<dir>|--xdg) <directory>
+  thumbnailer [--verbose] [--recursive] (--normal|--large) (--output=<dir>|--xdg) <directory>
   thumbnailer (-h | --help)
   thumbnailer --version
 
@@ -104,7 +105,7 @@ Options:
   --version           Show version.
   -v --verbose        Verbose output.
   -r --recursive      Recursive scan.
-  -s --small          Generate small thumbs.
+  -n --normal         Generate normal thumbs.
   -l --large          Generate large thumbs.
   -o --output=<dir>   Custom Output directory
   -x --xdg            XDG directory
@@ -115,11 +116,24 @@ struct Args {
     arg_directory: String,
     flag_verbose: bool,
     flag_recursive: bool,
-    flag_small: bool,
+    flag_normal: bool,
     flag_large: bool,
     flag_workers: Option<u32>,
     flag_output: Option<String>,
     flag_xdg: bool,
+}
+
+impl Args {
+    fn sizes(&self) -> Vec<ThumbSize> {
+        let mut result = Vec::new();
+        if self.flag_normal {
+            result.push(ThumbSize::Normal)
+        }
+        if self.flag_large {
+            result.push(ThumbSize::Large)
+        }
+        result
+    }
 }
 
 fn get_cache_destination(args: &Args) -> Result<PathBuf, String> {
@@ -191,25 +205,14 @@ fn main() {
                                 .to_lowercase();
                             println!("Found a file with extension {}", extension);
                             if extension == "jpg" || extension == "jpeg" || extension == "png" {
-                                if args.flag_small {
-                                    match Thumbnailer::generate(path.clone(), destination.clone(), ThumbSize::Normal) {
+                                for size in args.sizes() {
+                                    match Thumbnailer::generate(path.clone(), destination.clone(), size) {
                                         Ok(_) => {
-                                            println!("Created small thumbnail for {}", path.to_str().unwrap())
+                                            println!("Created {} thumbnail for {}", size.name(), path.to_str().unwrap())
                                         }
                                         Err(e) => println!(
-                                            "Failed to create small thumbnail for {}. Error {}",
-                                            path.to_str().unwrap(),
-                                            e
-                                        ),
-                                    }
-                                }
-                                if args.flag_large {
-                                    match Thumbnailer::generate(path.clone(), destination.clone(), ThumbSize::Large) {
-                                        Ok(_) => {
-                                            println!("Created large thumbnail for {}", path.to_str().unwrap())
-                                        }
-                                        Err(e) => println!(
-                                            "Failed to create large thumbnail for {}. Error {}",
+                                            "Failed to create {} thumbnail for {}. Error {}",
+                                            size.name(),
                                             path.to_str().unwrap(),
                                             e
                                         ),
