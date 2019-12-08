@@ -1,96 +1,10 @@
-mod thumbnailer {
-    use std::fs::File;
-    use std::io::BufReader;
-    use std::path::PathBuf;
-
-    #[derive(Copy, Clone)]
-    pub enum ThumbSize {
-        Normal,
-        Large,
-    }
-
-    impl ThumbSize {
-        fn size(&self) -> u32 {
-            match self {
-                ThumbSize::Normal => 128,
-                ThumbSize::Large => 256,
-            }
-        }
-
-        pub fn name(&self) -> &'static str {
-            match self {
-                ThumbSize::Normal => "normal",
-                ThumbSize::Large => "large",
-            }
-        }
-    }
-
-    pub struct Thumbnailer {
-        source_path: PathBuf,
-        cache_path: PathBuf,
-        destination_path: PathBuf,
-        image: Option<image::DynamicImage>,
-        image_size: ThumbSize,
-    }
-
-    impl Thumbnailer {
-        pub fn generate(source_path: PathBuf, cache_path: PathBuf, image_size: ThumbSize) -> Result<(), String> {
-            let thumbnailer = Thumbnailer {
-                source_path,
-                cache_path,
-                destination_path: PathBuf::new(),
-                image: None,
-                image_size,
-            };
-            Thumbnailer::create_thumbnail(thumbnailer)
-                .and_then(Thumbnailer::calculate_destination)
-                .and_then(Thumbnailer::save_thumbnail)
-        }
-
-        pub fn calculate_path_md5(path: &PathBuf) -> String {
-            let path_uri = "file://".to_owned() + path.to_str().unwrap();
-            let vec = md5::compute(path_uri).to_vec();
-            hex::encode(vec)
-        }
-
-        fn create_thumbnail(mut thumbnailer: Thumbnailer) -> Result<Thumbnailer, String> {
-            let image_format = image::ImageFormat::from_path(&thumbnailer.source_path)
-                .map_err(|_| "Failed to obtain file format".to_owned())?;
-            let file = File::open(&thumbnailer.source_path).map_err(|_| "File to open file".to_owned())?;
-            let reader = BufReader::new(file);
-            let image =
-                image::load(reader, image_format).map_err(|_| "Failed to load file".to_owned())?;
-            thumbnailer.image = Some(image.thumbnail(thumbnailer.image_size.size(), thumbnailer.image_size.size()));
-            Ok(thumbnailer)
-        }
-
-        fn calculate_destination(mut thumbnailer: Thumbnailer) -> Result<Thumbnailer, String> {
-            let filename = Thumbnailer::calculate_path_md5(&thumbnailer.source_path) + ".png";
-            thumbnailer.destination_path = thumbnailer.cache_path.join(thumbnailer.image_size.name()).join(filename);
-            println!(
-                "Saving thumb in {}",
-                thumbnailer.destination_path.to_str().unwrap()
-            );
-            Ok(thumbnailer)
-        }
-
-        fn save_thumbnail(thumbnailer: Thumbnailer) -> Result<(), String> {
-            thumbnailer
-                .image
-                .unwrap()
-                .save_with_format(
-                    thumbnailer.destination_path.to_str().unwrap(),
-                    image::ImageFormat::PNG,
-                )
-                .map_err(|_e| return "Failed to save thumbnail".to_owned())
-        }
-    }
-}
+mod thumbnailer;
+use crate::thumbnailer::ThumbSize;
+use crate::thumbnailer::Thumbnailer;
 
 use docopt::Docopt;
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
-use thumbnailer::{ThumbSize, Thumbnailer};
 
 const USAGE: &'static str = "
 Thumbnailer.
@@ -150,7 +64,33 @@ fn get_cache_destination(args: &Args) -> Result<PathBuf, String> {
     }
 }
 
+fn is_image(entry: &walkdir::DirEntry) -> bool {
+    let extension = match entry.path().extension() {
+        Some(e) => e,
+        _ => return false
+    };
+    let extensions = extension.to_str().unwrap().to_lowercase();
+    extensions == "jpg" || extensions == "jpeg" || extensions == "png"
+}
+
+fn generate_thumbnail(path: PathBuf, sizes: Vec<ThumbSize>, destination: &PathBuf) {
+    for size in sizes {
+        match Thumbnailer::generate(path.clone(), destination.clone(), size) {
+            Ok(_) => {
+                println!("Created {} thumbnail for {}", size.name(), path.to_str().unwrap())
+            }
+            Err(e) => println!(
+                "Failed to create {} thumbnail for {}. Error {}",
+                size.name(),
+                path.to_str().unwrap(),
+                e
+            ),
+        }
+    }
+}
+
 fn main() {
+    // Collect arguments
     let args: Args = Docopt::new(USAGE)
         .and_then(|d| d.deserialize())
         .and_then(|mut a: Args| {
@@ -166,6 +106,12 @@ fn main() {
         return;
     }
 
+    // Check input directory existence
+    if !path.exists() || !path.is_dir() {
+        println!("Input directory {} does not exists", path.to_str().unwrap());
+        return;
+    }
+
     // Check destination directory
     let destination = match get_cache_destination(&args) {
         Ok(p) => p,
@@ -175,69 +121,29 @@ fn main() {
         }
     };
 
+    // Check destination existence
     if !destination.exists() || !destination.is_dir() {
         println!("Cache directory {} does not exists", destination.to_str().unwrap());
         return;
     }
-
-    let mut queue: Vec<PathBuf> = Vec::new();
-    queue.push(path.to_owned());
-
-    while !queue.is_empty() {
-        let dir: PathBuf = queue.pop().unwrap();
-
-        println!("Processing directory {}", dir.to_str().unwrap());
-
-        if let Ok(dirs) = dir.read_dir() {
-            for entry in dirs {
-                if let Ok(entry) = entry {
-                    if let Ok(file_type) = entry.file_type() {
-                        if args.flag_recursive && file_type.is_dir() {
-                            queue.push(entry.path());
-                        }
-                        if file_type.is_file() {
-                            let path: PathBuf = entry.path();
-                            let extension = path
-                                .extension()
-                                .unwrap_or_default()
-                                .to_str()
-                                .unwrap()
-                                .to_lowercase();
-                            println!("Found a file with extension {}", extension);
-                            if extension == "jpg" || extension == "jpeg" || extension == "png" {
-                                for size in args.sizes() {
-                                    match Thumbnailer::generate(path.clone(), destination.clone(), size) {
-                                        Ok(_) => {
-                                            println!("Created {} thumbnail for {}", size.name(), path.to_str().unwrap())
-                                        }
-                                        Err(e) => println!(
-                                            "Failed to create {} thumbnail for {}. Error {}",
-                                            size.name(),
-                                            path.to_str().unwrap(),
-                                            e
-                                        ),
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+    for size in args.sizes() {
+        let size_directory = destination.join(size.name());
+        if !size_directory.exists() {
+            println!("Cache directory {} does not exists", size_directory.to_str().unwrap());
+            return;
         }
     }
-}
 
-#[cfg(test)]
-mod tests {
-    use crate::thumbnailer::Thumbnailer;
-    use std::path::Path;
-
-    #[test]
-    fn it_works() {
-        let path = Path::new("/home/jens/photos/me.png").to_owned();
-        assert_eq!(
-            Thumbnailer::calculate_path_md5(&path),
-            "c6ee772d9e49320e97ec29a7eb5b1697".to_owned()
-        );
+    // Prepare walk iterator
+    let mut walk = walkdir::WalkDir::new(path).min_depth(1);
+    if args.flag_recursive {
+        walk = walk.max_depth(1);
     }
+
+    // Walk filesystem
+    walk.into_iter()
+        .filter_map(|e| e.ok())
+        .filter(|e| is_image(e))
+        .map(|e| e.path().to_path_buf())
+        .for_each(|p| generate_thumbnail(p.clone(), args.sizes(), &destination));
 }
