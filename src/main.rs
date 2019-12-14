@@ -108,18 +108,6 @@ fn generate_thumbnail(path: PathBuf, sizes: Vec<ThumbSize>, destination: &PathBu
 }
 
 fn main() {
-    let mut f = std::fs::File::open("/home/filippo/.cache/thumbnails/large/03bc1863c50428c4a19f5b6657757933.png").unwrap();
-
-    let mut buf: [u8; 8] = [0; 8];// = [137, 80, 78, 71, 13, 10, 26, 10];
-    if f.read_exact(&mut buf).is_err() {
-        return;
-    }
-    if buf != [137, 80, 78, 71, 13, 10, 26, 10] {
-        return;
-    }
-
-    return;
-
     // Collect arguments
     let args: Args = Docopt::new(USAGE)
         .and_then(|d| d.deserialize())
