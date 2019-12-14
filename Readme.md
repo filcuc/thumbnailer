@@ -1,5 +1,7 @@
 # Thumbnailer
 
+[![Build Status](https://travis-ci.org/filcuc/thumbnailer.svg?branch=master)](https://travis-ci.org/filcuc/thumbnailer)
+
 Thumbnailer is an for creating thumbnails following the 
 [XDG standard version 0.8.0](https://specifications.freedesktop.org/thumbnail-spec/thumbnail-spec-0.8.0.html)
 
