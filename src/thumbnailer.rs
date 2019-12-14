@@ -108,7 +108,7 @@ mod tests {
     use std::path::Path;
 
     #[test]
-    fn it_works() {
+    fn test_calculate_path_md5() {
         let path = Path::new("/home/jens/photos/me.png").to_owned();
         assert_eq!(
             Thumbnailer::calculate_path_md5(&path),
