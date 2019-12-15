@@ -22,7 +22,6 @@ use crate::thumbnailer::Thumbnailer;
 use docopt::Docopt;
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
-use std::io::Read;
 
 const USAGE: &'static str = "
 Thumbnailer.
