@@ -2,9 +2,16 @@ language: rust
 
 rust:
   - stable
-  - beta
 
 cache: cargo
 
+before_cache: 
+  - cargo install cargo-tarpaulin -f
+
 script:
   - cargo test --verbose --all
+
+after_success:
+  - cargo tarpaulin --out Xml
+  - bash <(curl -s https://codecov.io/bash)
+  
