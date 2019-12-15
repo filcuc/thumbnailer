@@ -5,13 +5,11 @@ rust:
 
 cache: cargo
 
-before_cache: 
-  - cargo install cargo-tarpaulin -f
-
 script:
   - cargo test --verbose --all
 
 after_success:
+  - bash <(curl https://raw.githubusercontent.com/xd009642/tarpaulin/master/travis-install.sh)
   - CARGO_MANIFEST_DIR=`pwd` cargo tarpaulin --out Xml
   - bash <(curl -s https://codecov.io/bash)
   
