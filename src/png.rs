@@ -23,17 +23,58 @@ struct Chunk {
     crc: u32
 }
 
+impl Chunk {
+    fn new_text(keyword: &str,  text: &str) -> Result<Chunk, ()> {
+        if keyword.is_empty() || keyword.len() > 79 || keyword.contains('\0') {
+            return Err(());
+        }
+
+        if text.contains('\0') {
+            return Err(());
+        }
+
+        let text = text.to_owned().replace("\r\n", "\n");
+
+        if text.is_empty() {
+            return Err(());
+        }
+
+        let mut r = Chunk {
+            kind: "tEXt".to_owned(),
+            length: 0,
+            data: vec![],
+            crc: 0
+        };
+        r.data.extend_from_slice(keyword.as_bytes());
+        r.data.push(0);
+        r.data.extend_from_slice(text.as_bytes());
+
+        r.length = r.data.len() as u32;
+
+        let mut crc = CRC::new();
+        crc.update(r.kind.as_ref());
+        if !r.data.is_empty() {
+            crc.update(&r.data)
+        }
+
+        r.crc = crc.value();
+
+        Ok(r)
+    }
+}
+
 impl Png {
+    const PNG_SIGNATURE: [u8; 8] =  [137, 80, 78, 71, 13, 10, 26, 10];
+
     fn decode(input: &mut dyn std::io::Read) -> Result<Vec<Chunk>, ()> {
         Png::decode_signature(input)?;
         Png::decode_all_chunks(input)
     }
 
     fn decode_signature(input: &mut dyn std::io::Read) -> Result<(), ()> {
-        const PNG_SIGNATURE: [u8; 8] =  [137, 80, 78, 71, 13, 10, 26, 10];
         let mut buf: [u8; 8] = Default::default();
         input.read_exact(&mut buf).map_err(|_|())?;
-        if buf == PNG_SIGNATURE { Ok(()) } else { Err(()) }
+        if buf == Png::PNG_SIGNATURE { Ok(()) } else { Err(()) }
     }
 
     fn decode_all_chunks(input: &mut dyn std::io::Read) -> Result<Vec<Chunk>, ()>{
@@ -54,11 +95,11 @@ impl Png {
         let mut chunk_crc: [u8; 4] = Default::default();
         let mut chunk_data: Vec<u8> = vec![];
 
-        input.read_exact(&mut chunk_length);
+        input.read_exact(&mut chunk_length).map_err(|_e| ())?;
         let chunk_length = unsafe { std::mem::transmute::<[u8; 4], u32>(chunk_length).to_be()};
 
         input.read_exact(&mut chunk_kind).map_err(|_| ())?;
-        crc.update(&chunk_kind.to_vec());
+        crc.update(&chunk_kind);
         let chunk_kind = String::from_utf8(chunk_kind.to_vec()).map_err(|_|())?;
 
         if chunk_length > 0 {
@@ -82,8 +123,31 @@ impl Png {
         }
     }
 
-    fn encode(output: &mut dyn std::io::Read) -> Result<(), ()> {
-        Err(())
+    fn encode(output: &mut dyn std::io::Write, chunks: &Vec<Chunk>) -> Result<(), ()> {
+        output.write_all(Png::PNG_SIGNATURE.as_ref()).map_err(|_e|())?;
+        for c in chunks {
+            let mut crc = CRC::new();
+
+            let length: [u8; 4] = unsafe { std::mem::transmute((c.data.len() as u32).to_be()) };
+            output.write_all(&length).map_err(|_e|())?;
+
+            let kind: &[u8] = c.kind.as_ref();
+            if kind.len() != 4 {
+                return Err(());
+            }
+            crc.update(&kind);
+            output.write_all(kind).map_err(|_e|())?;
+
+            if !c.data.is_empty() {
+                crc.update(&c.data);
+                output.write_all(&c.data).map_err(|_e|())?;
+            }
+
+            let length: [u8; 4] = unsafe { std::mem::transmute(crc.value().to_be()) };
+            output.write_all(&length).map_err(|_e|())?;
+        }
+
+        Ok(())
     }
 }
 
@@ -151,7 +215,7 @@ impl CRC {
         CRC { c: 0xffffffffu32}
     }
 
-    fn update(&mut self, buf: &Vec<u8>) {
+    fn update(&mut self, buf: &[u8]) {
         for &b in buf {
             let k = (self.c ^ (b as u32)) & 0xff;
             self.c = CRC::CRC_TABLE[k as usize] ^ (self.c >> 8);
@@ -181,6 +245,52 @@ mod tests {
         assert!(chunks.is_ok());
         let chunks = chunks.unwrap();
         assert_eq!(chunks.len(), 15);
+    }
+
+    #[test]
+    fn test_png_encoder() {
+        let input_path = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
+            .join("test_resources")
+            .join("image.png");
+
+        // Read test image
+        let chunks = {
+            assert!(input_path.exists());
+            let mut file = std::fs::File::open(&input_path).unwrap();
+            Png::decode(&mut file).unwrap()
+        };
+
+        // Encode to another file
+        let output_path = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
+            .join("test_resources")
+            .join("image_copy.png");
+
+        if output_path.exists() {
+            std::fs::remove_file(&output_path).unwrap();
+        }
+
+        {
+            let mut file = std::fs::File::create(&output_path).unwrap();
+            Png::encode(&mut file, &chunks).unwrap();
+        }
+
+	{
+
+	    let input_data = {
+		let mut data: Vec<u8> = Default::default();
+		let mut file = std::fs::File::open(input_path).unwrap();
+		file.read_to_end(&mut data).unwrap();
+		data
+	    };
+
+	    let output_data = {
+		let mut data: Vec<u8> = Default::default();
+		let mut file = std::fs::File::open(output_path).unwrap();
+		file.read_to_end(&mut data).unwrap();
+		data
+	    };
+	    assert_eq!(input_data, output_data);
+	}
     }
 }
 
