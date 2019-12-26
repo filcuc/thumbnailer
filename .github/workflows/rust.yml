@@ -9,6 +9,8 @@ jobs:
 
     steps:
     - uses: actions/checkout@v1
+    - name: workaround bug of cache
+      run: chmod a+rwx -R ~/.cargo
     - name: Cache cargo
       uses: actions/cache@v1
       with:
