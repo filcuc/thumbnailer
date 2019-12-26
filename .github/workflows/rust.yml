@@ -22,7 +22,7 @@ jobs:
       run: cargo test --verbose
     - name: Collect coverage
       run: CARGO_MANIFEST_DIR=`pwd` cargo tarpaulin --out Xml  
-    - name: Codecov
+    - name: Upload coverage
       uses: codecov/codecov-action@v1.0.5
       with:
         token: ${{ secrets.CODECOV_TOKEN }} 
