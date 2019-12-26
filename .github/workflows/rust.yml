@@ -10,7 +10,7 @@ jobs:
     steps:
     - uses: actions/checkout@v1
     - name: workaround bug of cache
-      run: sudo chmod a+rwx -R ~/.cargo
+      run: sudo chown -R $USER:$USER ~/.cargo
     - name: Cache cargo
       uses: actions/cache@v1
       with:
