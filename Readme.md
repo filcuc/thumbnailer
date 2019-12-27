@@ -12,10 +12,11 @@ Thumbnailer is an for creating thumbnails following the
 - Creation of normal thumbs
 - Creation of large thumbs
 - Saving in XDG directory
+- Saving original image last modification image in thumb PNG metadata
 
 ## Missing features
-- Saving original image last modification image in thumb PNG metadata
 - Threaded image creation
+- Shared repositories
 
 ## Usage
 ```shell script
