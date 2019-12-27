@@ -1,3 +1,4 @@
+mod png;
 /**
     This file is part of Thumbnailer.
 
@@ -13,9 +14,7 @@
     You should have received a copy of the GNU General Public License
     along with Thumbnailer.  If not, see <http://www.gnu.org/licenses/>.
 */
-
 mod thumbnailer;
-mod png;
 use crate::thumbnailer::ThumbSize;
 use crate::thumbnailer::Thumbnailer;
 
@@ -84,7 +83,7 @@ fn get_cache_destination(args: &Args) -> Result<PathBuf, String> {
 fn is_image(entry: &walkdir::DirEntry) -> bool {
     let extension = match entry.path().extension() {
         Some(e) => e,
-        _ => return false
+        _ => return false,
     };
     let extensions = extension.to_str().unwrap().to_lowercase();
     extensions == "jpg" || extensions == "jpeg" || extensions == "png"
@@ -93,9 +92,11 @@ fn is_image(entry: &walkdir::DirEntry) -> bool {
 fn generate_thumbnail(path: PathBuf, sizes: Vec<ThumbSize>, destination: &PathBuf) {
     for size in sizes {
         match Thumbnailer::generate(path.clone(), destination.clone(), size) {
-            Ok(_) => {
-                println!("Created {} thumbnail for {}", size.name(), path.to_str().unwrap())
-            }
+            Ok(_) => println!(
+                "Created {} thumbnail for {}",
+                size.name(),
+                path.to_str().unwrap()
+            ),
             Err(e) => println!(
                 "Failed to create {} thumbnail for {}. Error {}",
                 size.name(),
@@ -140,13 +141,19 @@ fn main() {
 
     // Check destination existence
     if !destination.exists() || !destination.is_dir() {
-        println!("Cache directory {} does not exists", destination.to_str().unwrap());
+        println!(
+            "Cache directory {} does not exists",
+            destination.to_str().unwrap()
+        );
         return;
     }
     for size in args.sizes() {
         let size_directory = destination.join(size.name());
         if !size_directory.exists() {
-            println!("Cache directory {} does not exists", size_directory.to_str().unwrap());
+            println!(
+                "Cache directory {} does not exists",
+                size_directory.to_str().unwrap()
+            );
             return;
         }
     }
