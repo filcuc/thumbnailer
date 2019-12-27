@@ -1,3 +1,4 @@
 /target
 **/*.rs.bk
 .idea
+/test_resources/image_copy.png
