@@ -1,4 +1,3 @@
-mod png;
 /**
     This file is part of Thumbnailer.
 
@@ -15,9 +14,12 @@ mod png;
     along with Thumbnailer.  If not, see <http://www.gnu.org/licenses/>.
 */
 mod thumbnailer;
+mod png;
 use crate::thumbnailer::ThumbSize;
 use crate::thumbnailer::Thumbnailer;
 
+use env_logger::Env;
+use log::{info, warn, debug, error};
 use docopt::Docopt;
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
@@ -92,12 +94,12 @@ fn is_image(entry: &walkdir::DirEntry) -> bool {
 fn generate_thumbnail(path: PathBuf, sizes: Vec<ThumbSize>, destination: &PathBuf) {
     for size in sizes {
         match Thumbnailer::generate(path.clone(), destination.clone(), size) {
-            Ok(_) => println!(
+            Ok(_) => info!(
                 "Created {} thumbnail for {}",
                 size.name(),
                 path.to_str().unwrap()
             ),
-            Err(e) => println!(
+            Err(e) => error!(
                 "Failed to create {} thumbnail for {}. Error {}",
                 size.name(),
                 path.to_str().unwrap(),
@@ -117,16 +119,19 @@ fn main() {
         })
         .unwrap_or_else(|e| e.exit());
 
+    let level = if args.flag_verbose { "debug" } else { "info"};
+    env_logger::from_env(Env::default().default_filter_or(level)).init();
+
     // Check input directory
     let path = Path::new(args.arg_directory.as_str());
     if !path.exists() || !path.is_dir() {
-        println!("Directory {} does not exists", args.arg_directory);
+        error!("Directory {} does not exists", args.arg_directory);
         return;
     }
 
     // Check input directory existence
     if !path.exists() || !path.is_dir() {
-        println!("Input directory {} does not exists", path.to_str().unwrap());
+        error!("Input directory {} does not exists", path.to_str().unwrap());
         return;
     }
 
@@ -134,14 +139,14 @@ fn main() {
     let destination = match get_cache_destination(&args) {
         Ok(p) => p,
         Err(msg) => {
-            println!("{}", msg);
+            error!("{}", msg);
             return;
         }
     };
 
     // Check destination existence
     if !destination.exists() || !destination.is_dir() {
-        println!(
+        error!(
             "Cache directory {} does not exists",
             destination.to_str().unwrap()
         );
@@ -150,7 +155,7 @@ fn main() {
     for size in args.sizes() {
         let size_directory = destination.join(size.name());
         if !size_directory.exists() {
-            println!(
+            error!(
                 "Cache directory {} does not exists",
                 size_directory.to_str().unwrap()
             );

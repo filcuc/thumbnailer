@@ -1,4 +1,3 @@
-use image::GenericImageView;
 /**
     This file is part of Thumbnailer.
 
@@ -17,6 +16,8 @@ use image::GenericImageView;
 use std::fs::File;
 use std::io::BufReader;
 use std::path::PathBuf;
+use image::GenericImageView;
+use log::{info, error};
 
 #[derive(Copy, Clone)]
 pub enum ThumbSize {
@@ -130,7 +131,7 @@ impl Thumbnailer {
             }
         }
 
-        println!(
+        info!(
             "Saving thumb in {}",
             thumbnailer.destination_path.to_str().unwrap()
         );
@@ -147,7 +148,7 @@ impl Thumbnailer {
                 image::ImageFormat::PNG,
             )
             .map_err(|e| {
-                println!("{}", e);
+                error!("{}", e);
                 "Failed to save thumbnail".to_owned()
             });
         Ok(thumbnailer)
@@ -195,7 +196,7 @@ impl Thumbnailer {
             .open(&thumbnailer.temp_path)
             .map_err(|_e| "Failed to open thumbnailer in temporary dir".to_owned())?;
         crate::png::Png::encode(&mut output, &chunks).map_err(|e| {
-            println!("Error {:?}", e);
+            error!("Error {:?}", e);
             "Failed to encode chunks to temporary file"
         })?;
 
