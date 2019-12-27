@@ -5,7 +5,7 @@
 
 
 
-Thumbnailer is an for creating thumbnails following the 
+Thumbnailer is an app for creating thumbnails following the 
 [XDG standard version 0.8.0](https://specifications.freedesktop.org/thumbnail-spec/thumbnail-spec-0.8.0.html)
 
 ## Supported features
