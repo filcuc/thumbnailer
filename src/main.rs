@@ -97,7 +97,7 @@ fn generate_thumbnail(path: PathBuf, sizes: Vec<ThumbSize>, destination: &PathBu
             Ok(_) => info!(
                 "Created {} thumbnail for {}",
                 size.name(),
-                path.to_str().unwrap()
+                path.canonicalize().unwrap().to_str().unwrap()
             ),
             Err(e) => error!(
                 "Failed to create {} thumbnail for {}. Error {}",
@@ -144,22 +144,17 @@ fn main() {
         }
     };
 
-    // Check destination existence
-    if !destination.exists() || !destination.is_dir() {
-        error!(
-            "Cache directory {} does not exists",
-            destination.to_str().unwrap()
-        );
-        return;
-    }
+    // Create directories
     for size in args.sizes() {
         let size_directory = destination.join(size.name());
         if !size_directory.exists() {
-            error!(
-                "Cache directory {} does not exists",
-                size_directory.to_str().unwrap()
-            );
-            return;
+            debug!("Cache directory {} does not exists", size_directory.to_str().unwrap());
+            if let Err(e) = std::fs::create_dir_all(&size_directory) {
+                error!("Failed to create directory {}", size_directory.to_str().unwrap());
+                return;
+            } else {
+                debug!("Created directory {}", size_directory.to_str().unwrap());
+            }
         }
     }
 

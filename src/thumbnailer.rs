@@ -17,7 +17,7 @@ use std::fs::File;
 use std::io::BufReader;
 use std::path::PathBuf;
 use image::GenericImageView;
-use log::{info, error};
+use log::{info, error, debug};
 
 #[derive(Copy, Clone)]
 pub enum ThumbSize {
@@ -131,7 +131,7 @@ impl Thumbnailer {
             }
         }
 
-        info!(
+        debug!(
             "Saving thumb in {}",
             thumbnailer.destination_path.to_str().unwrap()
         );
