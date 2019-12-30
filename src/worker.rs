@@ -1,21 +1,36 @@
-use std::sync::{Arc, Mutex, Condvar};
-use std::path::{Path, PathBuf};
-use std::thread::{Thread, JoinHandle};
+/**
+    This file is part of Thumbnailer.
+
+    Thumbnailer is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License.
+
+    Thumbnailer is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with Thumbnailer.  If not, see <http://www.gnu.org/licenses/>.
+*/
+use crate::generate_thumbnail;
 use crate::thumbnailer::ThumbSize;
 use image::imageops::thumbnail;
-use crate::generate_thumbnail;
-use log::{debug};
+use log::debug;
 use std::collections::VecDeque;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Condvar, Mutex};
+use std::thread::{JoinHandle, Thread};
 
 struct GenerateData {
     source: PathBuf,
     sizes: Vec<ThumbSize>,
-    destination: PathBuf
+    destination: PathBuf,
 }
 
 enum Message {
     Exit,
-    Generate(GenerateData)
+    Generate(GenerateData),
 }
 
 pub struct Worker {
@@ -32,20 +47,22 @@ impl Worker {
         for _i in 0..num_workers {
             let cond = cond.clone();
             let queue = queue.clone();
-            workers.push(std::thread::spawn(move|| Worker::work(cond, queue)));
+            workers.push(std::thread::spawn(move || Worker::work(cond, queue)));
         }
         Worker {
             cond,
             workers,
-            queue
+            queue,
         }
     }
 
-    pub fn push(&self, source: PathBuf,
-                sizes: Vec<ThumbSize>,
-                destination: PathBuf) {
+    pub fn push(&self, source: PathBuf, sizes: Vec<ThumbSize>, destination: PathBuf) {
         let mut queue = self.queue.lock().unwrap();
-        queue.push_back(Message::Generate(GenerateData{ source, sizes, destination}));
+        queue.push_back(Message::Generate(GenerateData {
+            source,
+            sizes,
+            destination,
+        }));
         self.cond.notify_all();
     }
 
@@ -62,10 +79,12 @@ impl Worker {
                 }
                 if let Some(m) = m {
                     match m {
-                        Message::Exit => { return; },
+                        Message::Exit => {
+                            return;
+                        }
                         Message::Generate(data) => {
                             generate_thumbnail(data.source, data.sizes, &data.destination);
-                        },
+                        }
                     }
                 }
             }

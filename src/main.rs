@@ -14,14 +14,14 @@
     along with Thumbnailer.  If not, see <http://www.gnu.org/licenses/>.
 */
 mod thumbnailer;
-use crate::thumbnailer::{Thumbnailer, ThumbSize };
+use crate::thumbnailer::{ThumbSize, Thumbnailer};
 
 mod png;
 mod worker;
 
-use env_logger::Env;
-use log::{info, warn, debug, error};
 use docopt::Docopt;
+use env_logger::Env;
+use log::{debug, error, info, warn};
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
 
@@ -43,8 +43,6 @@ Options:
   -o --output=<dir>   Custom Output directory
   -x --xdg            XDG directory
 ";
-
-
 
 #[derive(Debug, Deserialize)]
 struct Args {
@@ -122,7 +120,7 @@ fn main() {
         })
         .unwrap_or_else(|e| e.exit());
 
-    let level = if args.flag_verbose { "debug" } else { "info"};
+    let level = if args.flag_verbose { "debug" } else { "info" };
     env_logger::from_env(Env::default().default_filter_or(level)).init();
 
     // Check input directory
@@ -151,9 +149,15 @@ fn main() {
     for size in args.sizes() {
         let size_directory = destination.join(size.name());
         if !size_directory.exists() {
-            debug!("Cache directory {} does not exists", size_directory.to_str().unwrap());
+            debug!(
+                "Cache directory {} does not exists",
+                size_directory.to_str().unwrap()
+            );
             if let Err(e) = std::fs::create_dir_all(&size_directory) {
-                error!("Failed to create directory {}", size_directory.to_str().unwrap());
+                error!(
+                    "Failed to create directory {}",
+                    size_directory.to_str().unwrap()
+                );
                 return;
             } else {
                 debug!("Created directory {}", size_directory.to_str().unwrap());

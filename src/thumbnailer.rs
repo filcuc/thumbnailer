@@ -13,11 +13,11 @@
     You should have received a copy of the GNU General Public License
     along with Thumbnailer.  If not, see <http://www.gnu.org/licenses/>.
 */
+use image::GenericImageView;
+use log::{debug, error, info};
 use std::fs::File;
 use std::io::BufReader;
 use std::path::PathBuf;
-use image::GenericImageView;
-use log::{info, error, debug};
 
 #[derive(Copy, Clone)]
 pub enum ThumbSize {
