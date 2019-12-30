@@ -14,9 +14,10 @@
     along with Thumbnailer.  If not, see <http://www.gnu.org/licenses/>.
 */
 mod thumbnailer;
+use crate::thumbnailer::{Thumbnailer, ThumbSize };
+
 mod png;
-use crate::thumbnailer::ThumbSize;
-use crate::thumbnailer::Thumbnailer;
+mod worker;
 
 use env_logger::Env;
 use log::{info, warn, debug, error};
@@ -42,6 +43,8 @@ Options:
   -o --output=<dir>   Custom Output directory
   -x --xdg            XDG directory
 ";
+
+
 
 #[derive(Debug, Deserialize)]
 struct Args {
@@ -158,6 +161,9 @@ fn main() {
         }
     }
 
+    // Prepare threads
+    let mut w = worker::Worker::new(4);
+
     // Prepare walk iterator
     let mut walk = walkdir::WalkDir::new(path).min_depth(1);
     if args.flag_recursive {
@@ -169,5 +175,5 @@ fn main() {
         .filter_map(|e| e.ok())
         .filter(|e| is_image(e))
         .map(|e| e.path().to_path_buf())
-        .for_each(|p| generate_thumbnail(p.clone(), args.sizes(), &destination));
+        .for_each(|p| w.push(p.clone(), args.sizes(), destination.clone()));
 }
