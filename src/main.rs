@@ -24,14 +24,15 @@ use env_logger::Env;
 use log::{debug, error, info, warn};
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
+use std::cmp::min;
 
 const USAGE: &'static str = "
 Thumbnailer.
 
 Usage:
-  thumbnailer [--verbose] [--recursive] (--normal|--large) (--output=<dir>|--xdg) <directory>
+  thumbnailer [-v] [-r] [--jobs=<num>] (-n|-l|-n -l) (--output=<dir>|-x) <directory>
   thumbnailer (-h | --help)
-  thumbnailer --version
+  thumbnailer (-v | --verbose)
 
 Options:
   -h --help           Show this screen.
@@ -42,6 +43,7 @@ Options:
   -l --large          Generate large thumbs.
   -o --output=<dir>   Custom Output directory
   -x --xdg            XDG directory
+  -j --jobs=<num>     Number of parallel jobs [default: 1]
 ";
 
 #[derive(Debug, Deserialize)]
@@ -54,6 +56,7 @@ struct Args {
     flag_workers: Option<u32>,
     flag_output: Option<String>,
     flag_xdg: bool,
+    flag_jobs: Option<i32>
 }
 
 impl Args {
@@ -166,7 +169,8 @@ fn main() {
     }
 
     // Prepare threads
-    let mut w = worker::Worker::new(4);
+    let jobs = min(1, args.flag_jobs.unwrap_or(1)) as u32;
+    let mut w = worker::Worker::new(jobs);
 
     // Prepare walk iterator
     let mut walk = walkdir::WalkDir::new(path).min_depth(1);
