@@ -21,7 +21,7 @@ mod worker;
 
 use docopt::Docopt;
 use env_logger::Env;
-use log::{debug, error, info, warn};
+use log::{debug, error, info};
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
 use std::cmp::min;
@@ -31,6 +31,7 @@ Thumbnailer.
 
 Usage:
   thumbnailer [-v] [-r] [--jobs=<num>] (-n|-l|-n -l) (--output=<dir>|-x) <directory>
+  thumbnailer [-v] [--jobs=<num>] (-n|-l|-n -l) -s <directory>
   thumbnailer (-h | --help)
   thumbnailer (-v | --verbose)
 
@@ -41,9 +42,10 @@ Options:
   -r --recursive      Recursive scan.
   -n --normal         Generate normal thumbs.
   -l --large          Generate large thumbs.
-  -o --output=<dir>   Custom Output directory
-  -x --xdg            XDG directory
   -j --jobs=<num>     Number of parallel jobs [default: 1]
+  -o --output=<dir>   Output to custom directory
+  -x --xdg            Output to XDG directory
+  -s --shared         Output to shared repository directory
 ";
 
 #[derive(Debug, Deserialize)]
@@ -56,6 +58,7 @@ struct Args {
     flag_workers: Option<u32>,
     flag_output: Option<String>,
     flag_xdg: bool,
+    flag_shared: bool,
     flag_jobs: Option<i32>
 }
 
@@ -156,7 +159,7 @@ fn main() {
                 "Cache directory {} does not exists",
                 size_directory.to_str().unwrap()
             );
-            if let Err(e) = std::fs::create_dir_all(&size_directory) {
+            if let Err(_e) = std::fs::create_dir_all(&size_directory) {
                 error!(
                     "Failed to create directory {}",
                     size_directory.to_str().unwrap()
@@ -170,7 +173,7 @@ fn main() {
 
     // Prepare threads
     let jobs = min(1, args.flag_jobs.unwrap_or(1)) as u32;
-    let mut w = worker::Worker::new(jobs);
+    let w = worker::Worker::new(jobs);
 
     // Prepare walk iterator
     let mut walk = walkdir::WalkDir::new(path).min_depth(1);

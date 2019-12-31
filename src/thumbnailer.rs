@@ -14,7 +14,7 @@
     along with Thumbnailer.  If not, see <http://www.gnu.org/licenses/>.
 */
 use image::GenericImageView;
-use log::{debug, error, info};
+use log::{debug, error};
 use std::fs::File;
 use std::io::BufReader;
 use std::path::PathBuf;

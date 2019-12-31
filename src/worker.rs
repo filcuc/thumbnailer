@@ -15,12 +15,11 @@
 */
 use crate::generate_thumbnail;
 use crate::thumbnailer::ThumbSize;
-use image::imageops::thumbnail;
-use log::debug;
 use std::collections::VecDeque;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::{Arc, Condvar, Mutex};
-use std::thread::{JoinHandle, Thread};
+use std::thread::JoinHandle;
+use log::error;
 
 struct GenerateData {
     source: PathBuf,
@@ -68,13 +67,12 @@ impl Worker {
 
     fn work(cond: Arc<Condvar>, queue: Arc<Mutex<VecDeque<Message>>>) {
         loop {
-            let mut m: Option<Message> = None;
-            {
+            let m: Option<Message>;
                 {
                     let mut guard = queue.lock().unwrap();
                     m = guard.pop_front();
                     if m.is_none() {
-                        guard = cond.wait(guard).unwrap();
+                        let _guard = cond.wait(guard).unwrap();
                     }
                 }
                 if let Some(m) = m {
@@ -87,7 +85,6 @@ impl Worker {
                         }
                     }
                 }
-            }
         }
     }
 }
@@ -103,7 +100,9 @@ impl Drop for Worker {
         }
 
         while !self.workers.is_empty() {
-            self.workers.pop().unwrap().join();
+            if let Err(_) = self.workers.pop().unwrap().join() {
+                error!("Could not join worker thread");
+            }
         }
     }
 }

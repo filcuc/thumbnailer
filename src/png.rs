@@ -52,7 +52,8 @@ impl Chunk {
         Ok(Chunk { kind, data })
     }
 
-    fn crc(&self) -> u32 {
+    /*
+    pub fn crc(&self) -> u32 {
         let mut crc = CRC::new();
         crc.update(self.kind.as_ref());
         if !self.data.is_empty() {
@@ -60,6 +61,7 @@ impl Chunk {
         }
         crc.value()
     }
+    */
 }
 
 impl Png {
