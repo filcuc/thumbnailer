@@ -14,8 +14,6 @@ Thumbnailer is an app for creating thumbnails following the
 - Saving in XDG directory
 - Saving original image last modification image in thumb PNG metadata
 - Threaded image creation
-
-## Missing features
 - Shared repositories
 
 ## Usage
