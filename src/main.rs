@@ -76,10 +76,12 @@ impl Args {
 }
 
 fn get_cache_destination(args: &Args) -> Result<PathBuf, String> {
-    if args.flag_output.is_none() && !args.flag_xdg {
-        Err("No output nore xdg arguments".to_owned())
+    if args.flag_output.is_none() && !args.flag_xdg && !args.flag_shared {
+        Err("No output or xdg or shared repository argument".to_owned())
     } else if let Some(path) = &args.flag_output {
         Ok(PathBuf::from(path))
+    } else if args.flag_shared {
+        Ok(PathBuf::from(&args.arg_directory).join(".sh_thumbnails"))
     } else if let Ok(path) = std::env::var("XDG_CACHE_HOME") {
         Ok(PathBuf::from(path).join("thumbnails"))
     } else if let Ok(path) = std::env::var("HOME") {
@@ -151,6 +153,8 @@ fn main() {
         }
     };
 
+    debug!("Output directory is {}", destination.to_str().unwrap());
+
     // Create directories
     for size in args.sizes() {
         let size_directory = destination.join(size.name());
@@ -168,6 +172,8 @@ fn main() {
             } else {
                 debug!("Created directory {}", size_directory.to_str().unwrap());
             }
+        } else {
+            debug!("Cache directory {} already exists", size_directory.to_str().unwrap());
         }
     }
 
