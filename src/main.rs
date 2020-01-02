@@ -23,8 +23,8 @@ use docopt::Docopt;
 use env_logger::Env;
 use log::{debug, error, info};
 use serde::Deserialize;
-use std::path::{Path, PathBuf};
 use std::cmp::min;
+use std::path::{Path, PathBuf};
 
 const USAGE: &'static str = "
 Thumbnailer.
@@ -59,7 +59,7 @@ struct Args {
     flag_output: Option<String>,
     flag_xdg: bool,
     flag_shared: bool,
-    flag_jobs: Option<i32>
+    flag_jobs: Option<i32>,
 }
 
 impl Args {
@@ -100,9 +100,9 @@ fn is_image(entry: &walkdir::DirEntry) -> bool {
     extensions == "jpg" || extensions == "jpeg" || extensions == "png"
 }
 
-fn generate_thumbnail(path: PathBuf, sizes: Vec<ThumbSize>, destination: &PathBuf) {
+fn generate_thumbnail(path: PathBuf, sizes: Vec<ThumbSize>, destination: &PathBuf, use_full_path_for_md5: bool) {
     for size in sizes {
-        match Thumbnailer::generate(path.clone(), destination.clone(), size) {
+        match Thumbnailer::generate(path.clone(), destination.clone(), size, use_full_path_for_md5) {
             Ok(_) => info!(
                 "Created {} thumbnail for {}",
                 size.name(),
@@ -173,7 +173,10 @@ fn main() {
                 debug!("Created directory {}", size_directory.to_str().unwrap());
             }
         } else {
-            debug!("Cache directory {} already exists", size_directory.to_str().unwrap());
+            debug!(
+                "Cache directory {} already exists",
+                size_directory.to_str().unwrap()
+            );
         }
     }
 
@@ -192,5 +195,5 @@ fn main() {
         .filter_map(|e| e.ok())
         .filter(|e| is_image(e))
         .map(|e| e.path().to_path_buf())
-        .for_each(|p| w.push(p.clone(), args.sizes(), destination.clone()));
+        .for_each(|p| w.push(p.clone(), args.sizes(), destination.clone(), !args.flag_shared));
 }

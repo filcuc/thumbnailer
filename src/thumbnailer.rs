@@ -16,9 +16,8 @@
 use image::GenericImageView;
 use log::{debug, error};
 use std::fs::File;
-use std::io::{BufReader, Error};
+use std::io::BufReader;
 use std::path::PathBuf;
-use std::process::ExitStatus;
 
 #[derive(Copy, Clone)]
 pub enum ThumbSize {
@@ -51,6 +50,7 @@ pub struct Thumbnailer {
     thumbnail: Option<image::DynamicImage>,
     thumbnail_size: ThumbSize,
     pub filename: String,
+    use_full_path_for_md5: bool,
 }
 
 impl Thumbnailer {
@@ -58,6 +58,7 @@ impl Thumbnailer {
         source_path: PathBuf,
         cache_path: PathBuf,
         image_size: ThumbSize,
+        use_full_path_for_md5: bool,
     ) -> Result<(), String> {
         let source_path = source_path
             .canonicalize()
@@ -71,6 +72,7 @@ impl Thumbnailer {
             image: None,
             thumbnail: None,
             thumbnail_size: image_size,
+            use_full_path_for_md5: use_full_path_for_md5
         };
         Thumbnailer::create_thumbnail_in_memory(thumbnailer)
             .and_then(Thumbnailer::calculate_filename)
@@ -81,8 +83,13 @@ impl Thumbnailer {
             .and_then(Thumbnailer::move_thumbnail_to_destination)
     }
 
-    pub fn calculate_path_md5(path: &PathBuf) -> String {
-        let path_uri = "file://".to_owned() + path.to_str().unwrap();
+    pub fn calculate_path_md5(use_full_path_for_md5: bool, path: &PathBuf) -> String {
+        let path = if use_full_path_for_md5 {
+            path.to_str().unwrap()
+        } else {
+            path.file_name().unwrap().to_str().unwrap()
+        };
+        let path_uri = "file://".to_owned() + path;
         let vec = md5::compute(path_uri).to_vec();
         hex::encode(vec)
     }
@@ -103,7 +110,7 @@ impl Thumbnailer {
     }
 
     fn calculate_filename(mut thumbnailer: Thumbnailer) -> Result<Thumbnailer, String> {
-        thumbnailer.filename = Thumbnailer::calculate_path_md5(&thumbnailer.source_path) + ".png";
+        thumbnailer.filename = Thumbnailer::calculate_path_md5(thumbnailer.use_full_path_for_md5, &thumbnailer.source_path) + ".png";
         Ok(thumbnailer)
     }
 
@@ -212,7 +219,11 @@ impl Thumbnailer {
         if r.is_ok() && r.unwrap().success() {
             Ok(())
         } else {
-            Err(format!("Failed to move from {} to {}", &thumbnailer.temp_path.to_str().unwrap(), &thumbnailer.destination_path.to_str().unwrap()))
+            Err(format!(
+                "Failed to move from {} to {}",
+                &thumbnailer.temp_path.to_str().unwrap(),
+                &thumbnailer.destination_path.to_str().unwrap()
+            ))
         }
     }
 }
@@ -221,13 +232,12 @@ impl Thumbnailer {
 mod tests {
     use crate::thumbnailer::Thumbnailer;
     use std::path::Path;
+    use image::imageops::thumbnail;
 
     #[test]
     fn test_calculate_path_md5() {
         let path = Path::new("/home/jens/photos/me.png").to_owned();
-        assert_eq!(
-            Thumbnailer::calculate_path_md5(&path),
-            "c6ee772d9e49320e97ec29a7eb5b1697".to_owned()
-        );
+        assert_eq!(Thumbnailer::calculate_path_md5(true, &path), "c6ee772d9e49320e97ec29a7eb5b1697".to_owned());
+        assert_eq!(Thumbnailer::calculate_path_md5(false, &path), "c1a0372ebbdd1df67f730201dc10e9d9".to_owned());
     }
 }

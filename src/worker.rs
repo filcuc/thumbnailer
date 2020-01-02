@@ -15,16 +15,17 @@
 */
 use crate::generate_thumbnail;
 use crate::thumbnailer::ThumbSize;
+use log::error;
 use std::collections::VecDeque;
 use std::path::PathBuf;
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread::JoinHandle;
-use log::error;
 
 struct GenerateData {
     source: PathBuf,
     sizes: Vec<ThumbSize>,
     destination: PathBuf,
+    use_full_path_for_md5: bool
 }
 
 enum Message {
@@ -55,12 +56,13 @@ impl Worker {
         }
     }
 
-    pub fn push(&self, source: PathBuf, sizes: Vec<ThumbSize>, destination: PathBuf) {
+    pub fn push(&self, source: PathBuf, sizes: Vec<ThumbSize>, destination: PathBuf, use_full_path_for_md5: bool) {
         let mut queue = self.queue.lock().unwrap();
         queue.push_back(Message::Generate(GenerateData {
             source,
             sizes,
             destination,
+            use_full_path_for_md5
         }));
         self.cond.notify_all();
     }
@@ -68,23 +70,19 @@ impl Worker {
     fn work(cond: Arc<Condvar>, queue: Arc<Mutex<VecDeque<Message>>>) {
         loop {
             let m: Option<Message>;
-                {
-                    let mut guard = queue.lock().unwrap();
-                    m = guard.pop_front();
-                    if m.is_none() {
-                        let _guard = cond.wait(guard).unwrap();
-                    }
+            {
+                let mut guard = queue.lock().unwrap();
+                m = guard.pop_front();
+                if m.is_none() {
+                    let _guard = cond.wait(guard).unwrap();
                 }
-                if let Some(m) = m {
-                    match m {
-                        Message::Exit => {
-                            return;
-                        }
-                        Message::Generate(data) => {
-                            generate_thumbnail(data.source, data.sizes, &data.destination);
-                        }
-                    }
-                }
+            }
+
+            match m {
+                Some(Message::Exit) => { return },
+                Some(Message::Generate(data)) => generate_thumbnail(data.source, data.sizes, &data.destination, data.use_full_path_for_md5),
+                _ => {}
+            }
         }
     }
 }
