@@ -16,8 +16,9 @@
 use image::GenericImageView;
 use log::{debug, error};
 use std::fs::File;
-use std::io::BufReader;
+use std::io::{BufReader, Error};
 use std::path::PathBuf;
+use std::process::ExitStatus;
 
 #[derive(Copy, Clone)]
 pub enum ThumbSize {
@@ -204,8 +205,15 @@ impl Thumbnailer {
     }
 
     fn move_thumbnail_to_destination(thumbnailer: Thumbnailer) -> Result<(), String> {
-        std::fs::rename(thumbnailer.temp_path, thumbnailer.destination_path)
-            .map_err(|_e| "Could not move thumb from temporary directory to destination".to_owned())
+        let r = std::process::Command::new("mv")
+            .arg(&thumbnailer.temp_path.to_str().unwrap())
+            .arg(&thumbnailer.destination_path.to_str().unwrap())
+            .status();
+        if r.is_ok() && r.unwrap().success() {
+            Ok(())
+        } else {
+            Err(format!("Failed to move from {} to {}", &thumbnailer.temp_path.to_str().unwrap(), &thumbnailer.destination_path.to_str().unwrap()))
+        }
     }
 }
 
