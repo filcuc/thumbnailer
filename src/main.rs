@@ -23,7 +23,6 @@ use docopt::Docopt;
 use env_logger::Env;
 use log::{debug, error, info};
 use serde::Deserialize;
-use std::cmp::min;
 use std::path::{Path, PathBuf};
 
 const USAGE: &'static str = "
@@ -181,12 +180,13 @@ fn main() {
     }
 
     // Prepare threads
-    let jobs = min(1, args.flag_jobs.unwrap_or(1)) as u32;
+    let jobs = args.flag_jobs.unwrap_or(1) as u32;
+    debug!("Initializing {} workers", jobs);
     let w = worker::Worker::new(jobs);
 
     // Prepare walk iterator
     let mut walk = walkdir::WalkDir::new(path).min_depth(1);
-    if args.flag_recursive {
+    if !args.flag_recursive {
         walk = walk.max_depth(1);
     }
 
@@ -195,5 +195,11 @@ fn main() {
         .filter_map(|e| e.ok())
         .filter(|e| is_image(e))
         .map(|e| e.path().to_path_buf())
-        .for_each(|p| w.push(p.clone(), args.sizes(), destination.clone(), !args.flag_shared));
+        .for_each(|p| {
+            let path = p.clone();
+            let sizes = args.sizes();
+            let dest = destination.clone();
+            let use_full_path_for_md5 = !args.flag_shared;
+            w.push(Box::new(move|| { generate_thumbnail(path, sizes, &dest, use_full_path_for_md5);}))
+        });
 }

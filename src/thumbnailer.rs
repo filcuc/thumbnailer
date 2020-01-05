@@ -18,6 +18,8 @@ use log::{debug, error};
 use std::fs::File;
 use std::io::BufReader;
 use std::path::PathBuf;
+use percent_encoding::{AsciiSet, CONTROLS};
+use std::ffi::OsStr;
 
 #[derive(Copy, Clone)]
 pub enum ThumbSize {
@@ -83,14 +85,36 @@ impl Thumbnailer {
             .and_then(Thumbnailer::move_thumbnail_to_destination)
     }
 
-    pub fn calculate_path_md5(use_full_path_for_md5: bool, path: &PathBuf) -> String {
+    fn calculate_path_uri(use_full_path_for_md5: bool, path: &PathBuf) -> String {
+        const FRAGMENT: &AsciiSet = &CONTROLS.add(b' ').add(b'"').add(b'<').add(b'>').add(b'`');
+        const PATH_SET: &AsciiSet = &FRAGMENT.add(b'#').add(b'?').add(b'{').add(b'}');
+        const USER_INFO_SET: &AsciiSet = &PATH_SET.add(b'/').add(b':').add(b';').add(b'=')
+            .add(b'@').add(b'[').add(b'\\').add(b']').add(b'^').add(b'|');
+
+        assert!(path.is_absolute());
+
         let path = if use_full_path_for_md5 {
-            path.to_str().unwrap()
+            let mut encoded = String::new();
+
+            for t in path.iter() {
+                if t == OsStr::new(&std::path::MAIN_SEPARATOR.to_string()) {
+                    continue;
+                } else {
+                    encoded.push(std::path::MAIN_SEPARATOR);
+                    encoded += &percent_encoding::utf8_percent_encode(t.to_str().unwrap(), USER_INFO_SET).to_string();
+                }
+            }
+            encoded
         } else {
-            path.file_name().unwrap().to_str().unwrap()
+            percent_encoding::utf8_percent_encode(path.file_name().unwrap().to_str().unwrap(), USER_INFO_SET).to_string()
         };
-        let path_uri = "file://".to_owned() + path;
-        let vec = md5::compute(path_uri).to_vec();
+
+        return "file://".to_owned() + &path;
+    }
+
+    pub fn calculate_path_md5(use_full_path_for_md5: bool, path: &PathBuf) -> String {
+        let uri = Thumbnailer::calculate_path_uri(use_full_path_for_md5, &path);
+        let vec = md5::compute(uri).to_vec();
         hex::encode(vec)
     }
 
@@ -169,7 +193,7 @@ impl Thumbnailer {
             crate::png::Png::decode(&mut input).map_err(|_e| "Failed decoding chunks".to_owned())?
         };
 
-        let uri_raw = "file://".to_owned() + thumbnailer.source_path.to_str().unwrap();
+        let uri_raw = Thumbnailer::calculate_path_uri(thumbnailer.use_full_path_for_md5, &thumbnailer.source_path);
         let uri = crate::png::Chunk::new_text("Thumb::URI", uri_raw).unwrap();
         chunks.insert(1, uri);
 
@@ -232,7 +256,6 @@ impl Thumbnailer {
 mod tests {
     use crate::thumbnailer::Thumbnailer;
     use std::path::Path;
-    use image::imageops::thumbnail;
 
     #[test]
     fn test_calculate_path_md5() {
