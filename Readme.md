@@ -7,7 +7,8 @@
 
 Thumbnailer is an app for creating thumbnails following the 
 [XDG standard version 0.8.0](https://specifications.freedesktop.org/thumbnail-spec/thumbnail-spec-0.8.0.html).
-Usefull if you want to create thumbnails in advance for big folders if you use a file manager complaint with the xdg standard (for examples Gnome Nautilus). 
+
+Usefull for creating thumbnails in advance for big folders if you use a file manager complaint with the xdg standard (for examples Gnome Nautilus aka "Files"). 
 
 ## Supported features
 - Creation of normal thumbs
