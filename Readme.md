@@ -6,7 +6,8 @@
 
 
 Thumbnailer is an app for creating thumbnails following the 
-[XDG standard version 0.8.0](https://specifications.freedesktop.org/thumbnail-spec/thumbnail-spec-0.8.0.html)
+[XDG standard version 0.8.0](https://specifications.freedesktop.org/thumbnail-spec/thumbnail-spec-0.8.0.html).
+Usefull if you want to create thumbnails in advance for big folders if you use a file manager complaint with the xdg standard (for examples Gnome Nautilus). 
 
 ## Supported features
 - Creation of normal thumbs
@@ -21,9 +22,10 @@ Thumbnailer is an app for creating thumbnails following the
 Thumbnailer.
 
 Usage:
-  thumbnailer [--verbose] [--recursive] (--normal|--large) (--output=<dir>|--xdg) <directory>
+  thumbnailer [-v] [-r] [--jobs=<num>] (-n|-l|-n -l) (--output=<dir>|-x) <directory>
+  thumbnailer [-v] [--jobs=<num>] (-n|-l|-n -l) -s <directory>
   thumbnailer (-h | --help)
-  thumbnailer --version
+  thumbnailer (-v | --verbose)
 
 Options:
   -h --help           Show this screen.
@@ -32,8 +34,11 @@ Options:
   -r --recursive      Recursive scan.
   -n --normal         Generate normal thumbs.
   -l --large          Generate large thumbs.
-  -o --output=<dir>   Custom Output directory
-  -x --xdg            XDG directory
+  -j --jobs=<num>     Number of parallel jobs [default: 1]
+  -o --output=<dir>   Output to custom directory
+  -x --xdg            Output to XDG directory
+  -s --shared         Output to shared repository directory
+
 ```
 
 ## Building
