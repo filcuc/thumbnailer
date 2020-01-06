@@ -51,19 +51,19 @@ impl Worker {
     pub fn push(&self, action: Action) {
         let mut queue = self.queue.lock().unwrap();
         queue.push_back(crate::worker::Message::Action(action));
-        self.cond.notify_one();
+        self.cond.notify_all();
     }
 
     fn work(cond: Arc<Condvar>, queue: Arc<Mutex<VecDeque<Message>>>) {
         loop {
-            let action: Option<Message>;
-            {
-                let mut guard = queue.lock().unwrap();
-                action = guard.pop_front();
-                if action.is_none() {
-                    let _guard = cond.wait(guard).unwrap();
-                }
+            let mut guard = queue.lock().unwrap();
+            while guard.is_empty() {
+                guard = cond.wait(guard).unwrap();
             }
+
+            let action = guard.pop_front();
+            std::mem::drop(guard);
+
             match action {
                 Some(Message::Exit()) => return,
                 Some(Message::Action(a)) => a(),
