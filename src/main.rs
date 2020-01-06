@@ -38,6 +38,7 @@ Options:
   -h --help           Show this screen.
   --version           Show version.
   -v --verbose        Verbose output.
+  -d --debug          Debug output.
   -r --recursive      Recursive scan.
   -n --normal         Generate normal thumbs.
   -l --large          Generate large thumbs.
@@ -51,6 +52,7 @@ Options:
 struct Args {
     arg_directory: String,
     flag_verbose: bool,
+    flag_debug: bool,
     flag_recursive: bool,
     flag_normal: bool,
     flag_large: bool,
@@ -127,7 +129,11 @@ fn main() {
         })
         .unwrap_or_else(|e| e.exit());
 
-    let level = if args.flag_verbose { "debug" } else { "info" };
+    let level = {
+        if args.flag_debug { "debug" }
+        else if args.flag_verbose { "info" }
+        else { "warn" }
+    };
     env_logger::from_env(Env::default().default_filter_or(level)).init();
 
     // Check input directory

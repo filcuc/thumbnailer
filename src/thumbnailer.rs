@@ -124,12 +124,16 @@ impl Thumbnailer {
         let file =
             File::open(&thumbnailer.source_path).map_err(|_| "File to open file".to_owned())?;
         let reader = BufReader::new(file);
-        thumbnailer.image =
-            Some(image::load(reader, image_format).map_err(|_| "Failed to load file".to_owned())?);
-        thumbnailer.thumbnail = Some(thumbnailer.image.as_ref().unwrap().thumbnail(
+        let image = image::load(reader, image_format).map_err(|_| "Failed to load file".to_owned())?;
+        let thumbnail = image.thumbnail(
             thumbnailer.thumbnail_size.size(),
             thumbnailer.thumbnail_size.size(),
-        ));
+        );
+        if thumbnail.width() == 0 || thumbnail.height() == 0 {
+            return Err(format!("Thumbnail width or height < 0 for image {}", thumbnailer.source_path.to_str().unwrap()));
+        }
+        thumbnailer.thumbnail = Some(thumbnail);
+        thumbnailer.image = Some(image);
         Ok(thumbnailer)
     }
 
