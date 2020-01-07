@@ -258,13 +258,29 @@ impl Thumbnailer {
 
 #[cfg(test)]
 mod tests {
-    use crate::thumbnailer::Thumbnailer;
-    use std::path::Path;
+    use crate::thumbnailer::{Thumbnailer, ThumbSize};
+    use std::path::{Path, PathBuf};
+    use image::imageops::thumbnail;
+    use crate::generate_thumbnail;
+    use std::ffi::OsString;
 
     #[test]
     fn test_calculate_path_md5() {
         let path = Path::new("/home/jens/photos/me.png").to_owned();
         assert_eq!(Thumbnailer::calculate_path_md5(true, &path), "c6ee772d9e49320e97ec29a7eb5b1697".to_owned());
         assert_eq!(Thumbnailer::calculate_path_md5(false, &path), "c1a0372ebbdd1df67f730201dc10e9d9".to_owned());
+    }
+
+    #[test]
+    fn test_new() {
+        let input_path = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
+            .join("test_resources")
+            .join("image.png");
+        std::fs::create_dir_all("/tmp/thumbnailer/normal").unwrap();
+        std::fs::create_dir_all("/tmp/thumbnailer/large").unwrap();
+        Thumbnailer::generate(input_path.clone(), PathBuf::from("/tmp/thumbnailer"), ThumbSize::Normal, true).unwrap();
+        Thumbnailer::generate(input_path.clone(), PathBuf::from("/tmp/thumbnailer"), ThumbSize::Large, true).unwrap();
+        Thumbnailer::generate(input_path.clone(), PathBuf::from("/tmp/thumbnailer"), ThumbSize::Normal, false).unwrap();
+        Thumbnailer::generate(input_path.clone(), PathBuf::from("/tmp/thumbnailer"), ThumbSize::Large, false).unwrap();
     }
 }
