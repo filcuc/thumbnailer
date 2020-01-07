@@ -90,3 +90,31 @@ impl Drop for Worker {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::worker::Worker;
+    use crate::worker::Message::Action;
+    use std::sync::{Arc, Mutex};
+    use std::ops::Deref;
+
+    #[test]
+    fn test_creation() {
+        let worker = Worker::new(1);
+        std::mem::drop(worker);
+    }
+
+    #[test]
+    fn test_push() {
+        let worker = Worker::new(1);
+        let executed = Arc::new(Mutex::new(false));
+        let e = executed.clone();
+        worker.push(Box::new(move||{
+            let mut value = e.lock().unwrap();
+            *value = true;
+        }));
+        std::mem::drop(worker);
+        assert!(*executed.lock().unwrap());
+    }
+}
+
