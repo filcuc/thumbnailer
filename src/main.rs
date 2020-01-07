@@ -21,9 +21,11 @@ mod worker;
 
 use docopt::Docopt;
 use env_logger::Env;
-use log::{debug, error, info};
+use log::{debug, error, info, warn};
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 const USAGE: &'static str = "
 Thumbnailer.
@@ -101,25 +103,50 @@ fn is_image(entry: &walkdir::DirEntry) -> bool {
     extensions == "jpg" || extensions == "jpeg" || extensions == "png"
 }
 
-fn generate_thumbnail(path: PathBuf, sizes: Vec<ThumbSize>, destination: &PathBuf, use_full_path_for_md5: bool) {
+fn generate_thumbnail(
+    path: PathBuf,
+    sizes: Vec<ThumbSize>,
+    destination: &PathBuf,
+    use_full_path_for_md5: bool,
+) -> Result<(), ()> {
+    let mut result = Ok(());
     for size in sizes {
-        match Thumbnailer::generate(path.clone(), destination.clone(), size, use_full_path_for_md5) {
+        match Thumbnailer::generate(
+            path.clone(),
+            destination.clone(),
+            size,
+            use_full_path_for_md5,
+        ) {
             Ok(_) => info!(
                 "Created {} thumbnail for {}",
                 size.name(),
                 path.canonicalize().unwrap().to_str().unwrap()
             ),
-            Err(e) => error!(
-                "Failed to create {} thumbnail for {}. Error {}",
-                size.name(),
-                path.to_str().unwrap(),
-                e
-            ),
+            Err(e) => {
+                error!(
+                    "Failed to create {} thumbnail for {}. Error {}",
+                    size.name(),
+                    path.to_str().unwrap(),
+                    e
+                );
+                result = Err(());
+            }
         }
     }
+    result
 }
 
 fn main() {
+    let running = Arc::new(AtomicBool::new(true));
+
+    // Handle SIGTERM
+    let r = running.clone();
+    ctrlc::set_handler(move || {
+        warn!("Handling CTRL-C");
+        r.store(false, Ordering::SeqCst);
+    })
+    .expect("Error setting Ctrl-C handler");
+
     // Collect arguments
     let args: Args = Docopt::new(USAGE)
         .and_then(|d| d.deserialize())
@@ -130,9 +157,13 @@ fn main() {
         .unwrap_or_else(|e| e.exit());
 
     let level = {
-        if args.flag_debug { "debug" }
-        else if args.flag_verbose { "info" }
-        else { "warn" }
+        if args.flag_debug {
+            "debug"
+        } else if args.flag_verbose {
+            "info"
+        } else {
+            "warn"
+        }
     };
     env_logger::from_env(Env::default().default_filter_or(level)).init();
 
@@ -206,6 +237,22 @@ fn main() {
             let sizes = args.sizes();
             let dest = destination.clone();
             let use_full_path_for_md5 = !args.flag_shared;
-            w.push(Box::new(move|| { generate_thumbnail(path, sizes, &dest, use_full_path_for_md5);}))
+            w.push(Box::new(move || {
+                generate_thumbnail(path, sizes, &dest, use_full_path_for_md5);
+            }))
         });
+
+    loop {
+        if !running.load(Ordering::SeqCst) {
+            warn!("Discarding pending jobs and wait for exit");
+            w.abort();
+            break;
+        }
+
+        if w.is_empty() {
+            break;
+        }
+
+        std::thread::sleep(std::time::Duration::from_millis(500));
+    }
 }

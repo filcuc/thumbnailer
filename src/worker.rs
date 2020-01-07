@@ -22,7 +22,7 @@ type Action = Box<dyn FnOnce() -> () + Send>;
 
 pub enum Message {
     Action(Action),
-    Exit()
+    Exit(),
 }
 
 pub struct Worker {
@@ -34,7 +34,7 @@ pub struct Worker {
 impl Worker {
     pub fn new(num_workers: u32) -> Worker {
         let cond = Arc::new(Condvar::new());
-        let queue= Arc::new(Mutex::new(VecDeque::new()));
+        let queue = Arc::new(Mutex::new(VecDeque::new()));
         let mut workers: Vec<JoinHandle<_>> = Vec::new();
         for _i in 0..num_workers {
             let cond = cond.clone();
@@ -71,6 +71,19 @@ impl Worker {
             }
         }
     }
+
+    pub fn abort(&self) {
+        let mut guard = self.queue.lock().unwrap();
+        guard.clear();
+        for _w in &self.workers {
+            guard.push_back(Message::Exit());
+        }
+        self.cond.notify_all();
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.queue.lock().unwrap().is_empty()
+    }
 }
 
 impl Drop for Worker {
@@ -93,14 +106,15 @@ impl Drop for Worker {
 
 #[cfg(test)]
 mod tests {
-    use crate::worker::Worker;
     use crate::worker::Message::Action;
-    use std::sync::{Arc, Mutex};
+    use crate::worker::Worker;
     use std::ops::Deref;
+    use std::sync::{Arc, Mutex};
 
     #[test]
     fn test_creation() {
         let worker = Worker::new(1);
+        assert!(worker.is_empty());
         std::mem::drop(worker);
     }
 
@@ -109,12 +123,26 @@ mod tests {
         let worker = Worker::new(1);
         let executed = Arc::new(Mutex::new(false));
         let e = executed.clone();
-        worker.push(Box::new(move||{
+        worker.push(Box::new(move || {
             let mut value = e.lock().unwrap();
             *value = true;
         }));
         std::mem::drop(worker);
         assert!(*executed.lock().unwrap());
     }
-}
 
+    #[test]
+    fn test_is_empty() {
+        let worker = Worker::new(1);
+        let executed = Arc::new(Mutex::new(false));
+        let e = executed.clone();
+        worker.push(Box::new(move || {
+            let mut value = e.lock().unwrap();
+            *value = true;
+        }));
+
+        while !worker.is_empty() {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+    }
+}

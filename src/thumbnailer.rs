@@ -15,11 +15,11 @@
 */
 use image::GenericImageView;
 use log::{debug, error};
+use percent_encoding::{AsciiSet, CONTROLS};
+use std::ffi::OsStr;
 use std::fs::File;
 use std::io::BufReader;
 use std::path::PathBuf;
-use percent_encoding::{AsciiSet, CONTROLS};
-use std::ffi::OsStr;
 
 #[derive(Copy, Clone)]
 pub enum ThumbSize {
@@ -74,7 +74,7 @@ impl Thumbnailer {
             image: None,
             thumbnail: None,
             thumbnail_size: image_size,
-            use_full_path_for_md5: use_full_path_for_md5
+            use_full_path_for_md5: use_full_path_for_md5,
         };
         Thumbnailer::create_thumbnail_in_memory(thumbnailer)
             .and_then(Thumbnailer::calculate_filename)
@@ -88,8 +88,17 @@ impl Thumbnailer {
     fn calculate_path_uri(use_full_path_for_md5: bool, path: &PathBuf) -> String {
         const FRAGMENT: &AsciiSet = &CONTROLS.add(b' ').add(b'"').add(b'<').add(b'>').add(b'`');
         const PATH_SET: &AsciiSet = &FRAGMENT.add(b'#').add(b'?').add(b'{').add(b'}');
-        const USER_INFO_SET: &AsciiSet = &PATH_SET.add(b'/').add(b':').add(b';').add(b'=')
-            .add(b'@').add(b'[').add(b'\\').add(b']').add(b'^').add(b'|');
+        const USER_INFO_SET: &AsciiSet = &PATH_SET
+            .add(b'/')
+            .add(b':')
+            .add(b';')
+            .add(b'=')
+            .add(b'@')
+            .add(b'[')
+            .add(b'\\')
+            .add(b']')
+            .add(b'^')
+            .add(b'|');
 
         assert!(path.is_absolute());
 
@@ -101,12 +110,18 @@ impl Thumbnailer {
                     continue;
                 } else {
                     encoded.push(std::path::MAIN_SEPARATOR);
-                    encoded += &percent_encoding::utf8_percent_encode(t.to_str().unwrap(), USER_INFO_SET).to_string();
+                    encoded +=
+                        &percent_encoding::utf8_percent_encode(t.to_str().unwrap(), USER_INFO_SET)
+                            .to_string();
                 }
             }
             encoded
         } else {
-            percent_encoding::utf8_percent_encode(path.file_name().unwrap().to_str().unwrap(), USER_INFO_SET).to_string()
+            percent_encoding::utf8_percent_encode(
+                path.file_name().unwrap().to_str().unwrap(),
+                USER_INFO_SET,
+            )
+            .to_string()
         };
 
         return "file://".to_owned() + &path;
@@ -124,13 +139,17 @@ impl Thumbnailer {
         let file =
             File::open(&thumbnailer.source_path).map_err(|_| "File to open file".to_owned())?;
         let reader = BufReader::new(file);
-        let image = image::load(reader, image_format).map_err(|_| "Failed to load file".to_owned())?;
+        let image =
+            image::load(reader, image_format).map_err(|_| "Failed to load file".to_owned())?;
         let thumbnail = image.thumbnail(
             thumbnailer.thumbnail_size.size(),
             thumbnailer.thumbnail_size.size(),
         );
         if thumbnail.width() == 0 || thumbnail.height() == 0 {
-            return Err(format!("Thumbnail width or height < 0 for image {}", thumbnailer.source_path.to_str().unwrap()));
+            return Err(format!(
+                "Thumbnail width or height < 0 for image {}",
+                thumbnailer.source_path.to_str().unwrap()
+            ));
         }
         thumbnailer.thumbnail = Some(thumbnail);
         thumbnailer.image = Some(image);
@@ -138,7 +157,10 @@ impl Thumbnailer {
     }
 
     fn calculate_filename(mut thumbnailer: Thumbnailer) -> Result<Thumbnailer, String> {
-        thumbnailer.filename = Thumbnailer::calculate_path_md5(thumbnailer.use_full_path_for_md5, &thumbnailer.source_path) + ".png";
+        thumbnailer.filename = Thumbnailer::calculate_path_md5(
+            thumbnailer.use_full_path_for_md5,
+            &thumbnailer.source_path,
+        ) + ".png";
         Ok(thumbnailer)
     }
 
@@ -197,7 +219,10 @@ impl Thumbnailer {
             crate::png::Png::decode(&mut input).map_err(|_e| "Failed decoding chunks".to_owned())?
         };
 
-        let uri_raw = Thumbnailer::calculate_path_uri(thumbnailer.use_full_path_for_md5, &thumbnailer.source_path);
+        let uri_raw = Thumbnailer::calculate_path_uri(
+            thumbnailer.use_full_path_for_md5,
+            &thumbnailer.source_path,
+        );
         let uri = crate::png::Chunk::new_text("Thumb::URI", uri_raw).unwrap();
         chunks.insert(1, uri);
 
@@ -258,17 +283,23 @@ impl Thumbnailer {
 
 #[cfg(test)]
 mod tests {
-    use crate::thumbnailer::{Thumbnailer, ThumbSize};
-    use std::path::{Path, PathBuf};
-    use image::imageops::thumbnail;
     use crate::generate_thumbnail;
+    use crate::thumbnailer::{ThumbSize, Thumbnailer};
+    use image::imageops::thumbnail;
     use std::ffi::OsString;
+    use std::path::{Path, PathBuf};
 
     #[test]
     fn test_calculate_path_md5() {
         let path = Path::new("/home/jens/photos/me.png").to_owned();
-        assert_eq!(Thumbnailer::calculate_path_md5(true, &path), "c6ee772d9e49320e97ec29a7eb5b1697".to_owned());
-        assert_eq!(Thumbnailer::calculate_path_md5(false, &path), "c1a0372ebbdd1df67f730201dc10e9d9".to_owned());
+        assert_eq!(
+            Thumbnailer::calculate_path_md5(true, &path),
+            "c6ee772d9e49320e97ec29a7eb5b1697".to_owned()
+        );
+        assert_eq!(
+            Thumbnailer::calculate_path_md5(false, &path),
+            "c1a0372ebbdd1df67f730201dc10e9d9".to_owned()
+        );
     }
 
     #[test]
@@ -278,9 +309,33 @@ mod tests {
             .join("image.png");
         std::fs::create_dir_all("/tmp/thumbnailer/normal").unwrap();
         std::fs::create_dir_all("/tmp/thumbnailer/large").unwrap();
-        Thumbnailer::generate(input_path.clone(), PathBuf::from("/tmp/thumbnailer"), ThumbSize::Normal, true).unwrap();
-        Thumbnailer::generate(input_path.clone(), PathBuf::from("/tmp/thumbnailer"), ThumbSize::Large, true).unwrap();
-        Thumbnailer::generate(input_path.clone(), PathBuf::from("/tmp/thumbnailer"), ThumbSize::Normal, false).unwrap();
-        Thumbnailer::generate(input_path.clone(), PathBuf::from("/tmp/thumbnailer"), ThumbSize::Large, false).unwrap();
+        Thumbnailer::generate(
+            input_path.clone(),
+            PathBuf::from("/tmp/thumbnailer"),
+            ThumbSize::Normal,
+            true,
+        )
+        .unwrap();
+        Thumbnailer::generate(
+            input_path.clone(),
+            PathBuf::from("/tmp/thumbnailer"),
+            ThumbSize::Large,
+            true,
+        )
+        .unwrap();
+        Thumbnailer::generate(
+            input_path.clone(),
+            PathBuf::from("/tmp/thumbnailer"),
+            ThumbSize::Normal,
+            false,
+        )
+        .unwrap();
+        Thumbnailer::generate(
+            input_path.clone(),
+            PathBuf::from("/tmp/thumbnailer"),
+            ThumbSize::Large,
+            false,
+        )
+        .unwrap();
     }
 }
