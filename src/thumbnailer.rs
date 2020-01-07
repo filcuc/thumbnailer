@@ -283,10 +283,7 @@ impl Thumbnailer {
 
 #[cfg(test)]
 mod tests {
-    use crate::generate_thumbnail;
     use crate::thumbnailer::{ThumbSize, Thumbnailer};
-    use image::imageops::thumbnail;
-    use std::ffi::OsString;
     use std::path::{Path, PathBuf};
 
     #[test]

@@ -108,8 +108,7 @@ fn generate_thumbnail(
     sizes: Vec<ThumbSize>,
     destination: &PathBuf,
     use_full_path_for_md5: bool,
-) -> Result<(), ()> {
-    let mut result = Ok(());
+) {
     for size in sizes {
         match Thumbnailer::generate(
             path.clone(),
@@ -122,18 +121,14 @@ fn generate_thumbnail(
                 size.name(),
                 path.canonicalize().unwrap().to_str().unwrap()
             ),
-            Err(e) => {
-                error!(
-                    "Failed to create {} thumbnail for {}. Error {}",
-                    size.name(),
-                    path.to_str().unwrap(),
-                    e
-                );
-                result = Err(());
-            }
+            Err(e) => error!(
+                "Failed to create {} thumbnail for {}. Error {}",
+                size.name(),
+                path.to_str().unwrap(),
+                e
+            ),
         }
     }
-    result
 }
 
 fn main() {

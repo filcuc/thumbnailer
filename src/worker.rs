@@ -106,9 +106,7 @@ impl Drop for Worker {
 
 #[cfg(test)]
 mod tests {
-    use crate::worker::Message::Action;
     use crate::worker::Worker;
-    use std::ops::Deref;
     use std::sync::{Arc, Mutex};
 
     #[test]
