@@ -17,15 +17,12 @@ mod thumbnailer;
 use crate::thumbnailer::{ThumbSize, Thumbnailer};
 
 mod png;
-mod worker;
 
 use docopt::Docopt;
 use env_logger::Env;
 use log::{debug, error, info, warn};
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
 
 const USAGE: &'static str = "
 Thumbnailer.
@@ -103,42 +100,18 @@ fn is_image(entry: &walkdir::DirEntry) -> bool {
     extensions == "jpg" || extensions == "jpeg" || extensions == "png"
 }
 
-fn generate_thumbnail(
+struct Work {
     path: PathBuf,
-    sizes: Vec<ThumbSize>,
-    destination: &PathBuf,
+    size: ThumbSize,
+    destination: PathBuf,
     use_full_path_for_md5: bool,
-) {
-    for size in sizes {
-        match Thumbnailer::generate(
-            path.clone(),
-            destination.clone(),
-            size,
-            use_full_path_for_md5,
-        ) {
-            Ok(_) => info!(
-                "Created {} thumbnail for {}",
-                size.name(),
-                path.canonicalize().unwrap().to_str().unwrap()
-            ),
-            Err(e) => error!(
-                "Failed to create {} thumbnail for {}. Error {}",
-                size.name(),
-                path.to_str().unwrap(),
-                e
-            ),
-        }
-    }
 }
 
 fn main() {
-    let running = Arc::new(AtomicBool::new(true));
-
     // Handle SIGTERM
-    let r = running.clone();
     ctrlc::set_handler(move || {
         warn!("Handling CTRL-C");
-        r.store(false, Ordering::SeqCst);
+        std::process::exit(1);
     })
     .expect("Error setting Ctrl-C handler");
 
@@ -212,14 +185,43 @@ fn main() {
     }
 
     // Prepare threads
-    let jobs = args.flag_jobs.unwrap_or(1) as u32;
+    let jobs = args.flag_jobs.unwrap_or(1) as usize;
     debug!("Initializing {} workers", jobs);
-    let w = worker::Worker::new(jobs);
 
     // Prepare walk iterator
     let mut walk = walkdir::WalkDir::new(path).min_depth(1);
     if !args.flag_recursive {
         walk = walk.max_depth(1);
+    }
+
+    let (sender, receiver) = crossbeam::channel::bounded(jobs * 2);
+    let mut workers = Vec::new();
+    for _ in 0..jobs {
+        let r = receiver.clone();
+        workers.push(std::thread::spawn(move || loop {
+            let work: Work = match r.recv() {
+                Ok(v) => v,
+                Err(_) => break,
+            };
+            match Thumbnailer::generate(
+                work.path.clone(),
+                work.destination.clone(),
+                work.size,
+                work.use_full_path_for_md5,
+            ) {
+                Ok(_) => info!(
+                    "Created {} thumbnail for {}",
+                    work.size.name(),
+                    work.path.canonicalize().unwrap().to_str().unwrap()
+                ),
+                Err(e) => error!(
+                    "Failed to create {} thumbnail for {}. Error {}",
+                    work.size.name(),
+                    work.path.to_str().unwrap(),
+                    e
+                ),
+            }
+        }))
     }
 
     // Walk filesystem
@@ -228,26 +230,19 @@ fn main() {
         .filter(|e| is_image(e))
         .map(|e| e.path().to_path_buf())
         .for_each(|p| {
-            let path = p.clone();
-            let sizes = args.sizes();
-            let dest = destination.clone();
-            let use_full_path_for_md5 = !args.flag_shared;
-            w.push(Box::new(move || {
-                generate_thumbnail(path, sizes, &dest, use_full_path_for_md5);
-            }))
+            for size in args.sizes() {
+                sender
+                    .send(Work {
+                        path: p.clone(),
+                        destination: destination.clone(),
+                        use_full_path_for_md5: !args.flag_shared,
+                        size,
+                    })
+                    .unwrap()
+            }
         });
-
-    loop {
-        if !running.load(Ordering::SeqCst) {
-            warn!("Discarding pending jobs and wait for exit");
-            w.abort();
-            break;
-        }
-
-        if w.is_empty() {
-            break;
-        }
-
-        std::thread::sleep(std::time::Duration::from_millis(500));
+    drop(sender);
+    for w in workers {
+        w.join().unwrap();
     }
 }
