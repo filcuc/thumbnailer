@@ -16,8 +16,6 @@
 mod thumbnailer;
 use crate::thumbnailer::{ThumbSize, Thumbnailer};
 
-mod png;
-
 use docopt::Docopt;
 use env_logger::Env;
 use log::{debug, error, info, warn};
