@@ -14,12 +14,41 @@
     along with Thumbnailer.  If not, see <http://www.gnu.org/licenses/>.
 */
 use image::GenericImageView;
-use log::{debug, error};
+use log::debug;
 use percent_encoding::{AsciiSet, CONTROLS};
 use std::ffi::OsStr;
 use std::fs::File;
 use std::io::BufReader;
 use std::path::PathBuf;
+
+const PNG_TEXT_KIND: [u8; 4] = ['t' as u8, 'E' as u8, 'X' as u8, 't' as u8];
+
+pub fn text_chunk<S: Into<String>>(keyword: &str, text: S) -> Result<Vec<u8>, ()> {
+    let text = text.into();
+
+    if keyword.is_empty() || keyword.len() > 79 || keyword.contains('\0') {
+        return Err(());
+    }
+
+    if text.contains('\0') {
+        return Err(());
+    }
+
+    let text = text.replace("\r\n", "\n");
+
+    if text.is_empty() {
+        return Err(());
+    }
+    let data = {
+        let mut r = vec![];
+        r.extend_from_slice(keyword.as_bytes());
+        r.push(0);
+        r.extend_from_slice(text.as_bytes());
+        r
+    };
+
+    Ok(data)
+}
 
 #[derive(Copy, Clone)]
 pub enum ThumbSize {
@@ -46,7 +75,6 @@ impl ThumbSize {
 pub struct Thumbnailer {
     source_path: PathBuf,
     cache_path: PathBuf,
-    temp_path: PathBuf,
     destination_path: PathBuf,
     image: Option<image::DynamicImage>,
     thumbnail: Option<image::DynamicImage>,
@@ -68,7 +96,6 @@ impl Thumbnailer {
         let thumbnailer = Thumbnailer {
             source_path,
             cache_path,
-            temp_path: PathBuf::new(),
             destination_path: PathBuf::new(),
             filename: String::new(),
             image: None,
@@ -78,10 +105,8 @@ impl Thumbnailer {
         };
         Thumbnailer::create_thumbnail_in_memory(thumbnailer)
             .and_then(Thumbnailer::calculate_filename)
-            .and_then(Thumbnailer::calculate_temporary_destination)
             .and_then(Thumbnailer::calculate_destination)
             .and_then(Thumbnailer::save_thumbnail_to_temp)
-            .and_then(Thumbnailer::update_metadata)
             .and_then(Thumbnailer::move_thumbnail_to_destination)
     }
 
@@ -162,30 +187,11 @@ impl Thumbnailer {
         Ok(thumbnailer)
     }
 
-    fn calculate_temporary_destination(
-        mut thumbnailer: Thumbnailer,
-    ) -> Result<Thumbnailer, String> {
-        thumbnailer.temp_path = std::env::temp_dir().join(&thumbnailer.filename);
-        if thumbnailer.temp_path.exists() {
-            if let Err(_) = std::fs::remove_file(&thumbnailer.temp_path) {
-                return Err("Failed to remove temporary".to_owned());
-            }
-        }
-
-        Ok(thumbnailer)
-    }
-
     fn calculate_destination(mut thumbnailer: Thumbnailer) -> Result<Thumbnailer, String> {
         thumbnailer.destination_path = thumbnailer
             .cache_path
             .join(thumbnailer.thumbnail_size.name())
             .join(&thumbnailer.filename);
-
-        if thumbnailer.destination_path.exists() {
-            if let Err(_) = std::fs::remove_file(&thumbnailer.destination_path) {
-                return Err("Failed to remove existing thumbnail in destionation dir".to_owned());
-            }
-        }
 
         debug!(
             "Saving thumb in {}",
@@ -195,87 +201,91 @@ impl Thumbnailer {
     }
 
     fn save_thumbnail_to_temp(thumbnailer: Thumbnailer) -> Result<Thumbnailer, String> {
-        &thumbnailer
-            .thumbnail
-            .as_ref()
-            .unwrap()
-            .save_with_format(
-                thumbnailer.temp_path.to_str().unwrap(),
-                image::ImageFormat::PNG,
-            )
-            .map_err(|e| {
-                error!("{}", e);
-                "Failed to save thumbnail".to_owned()
-            });
-        Ok(thumbnailer)
-    }
+        let temp_path = format!("{}.tmp", thumbnailer.destination_path.to_str().unwrap());
+        let output = std::fs::OpenOptions::new()
+            .write(true)
+            .truncate(true)
+            .create(true)
+            .open(&temp_path)
+            .map_err(|e| format!("Failed to open thumbnailer in temporary dir: {}", e))?;
 
-    fn update_metadata(thumbnailer: Thumbnailer) -> Result<Thumbnailer, String> {
-        let mut chunks = {
-            let mut input = std::fs::File::open(&thumbnailer.temp_path)
-                .map_err(|_e| "Failed to open thumbnailer in temporary dir".to_owned())?;
-            crate::png::Png::decode(&mut input).map_err(|_e| "Failed decoding chunks".to_owned())?
+        let thumbnail = thumbnailer.thumbnail.as_ref().unwrap();
+        let (ct, bits) = match thumbnail.color() {
+            image::ColorType::L8 => (png::ColorType::Grayscale, png::BitDepth::Eight),
+            image::ColorType::L16 => (png::ColorType::Grayscale, png::BitDepth::Sixteen),
+            image::ColorType::La8 => (png::ColorType::GrayscaleAlpha, png::BitDepth::Eight),
+            image::ColorType::La16 => (png::ColorType::GrayscaleAlpha, png::BitDepth::Sixteen),
+            image::ColorType::Rgb8 => (png::ColorType::RGB, png::BitDepth::Eight),
+            image::ColorType::Rgb16 => (png::ColorType::RGB, png::BitDepth::Sixteen),
+            image::ColorType::Rgba8 => (png::ColorType::RGBA, png::BitDepth::Eight),
+            image::ColorType::Rgba16 => (png::ColorType::RGBA, png::BitDepth::Sixteen),
+            _ => return Err("unsupported format".to_string()),
         };
+        let mut encoder = png::Encoder::new(output, thumbnail.width(), thumbnail.height());
+        encoder.set_color(ct);
+        encoder.set_depth(bits);
+        let mut writer = encoder
+            .write_header()
+            .map_err(|e| format!("Error writing PNG header: {}", e))?;
 
         let uri_raw = Thumbnailer::calculate_path_uri(
             thumbnailer.use_full_path_for_md5,
             &thumbnailer.source_path,
         );
-        let uri = crate::png::Chunk::new_text("Thumb::URI", uri_raw).unwrap();
-        chunks.insert(1, uri);
+        writer
+            .write_chunk(PNG_TEXT_KIND, &text_chunk("Thumb::URI", uri_raw).unwrap())
+            .map_err(|e| format!("Error writing PNG chunk: {}", e))?;
 
         let metadata = std::fs::metadata(&thumbnailer.source_path).unwrap();
-
         let mtime_raw = metadata.modified().unwrap();
         let mtime_raw = mtime_raw.duration_since(std::time::UNIX_EPOCH).unwrap();
         let mtime_raw = mtime_raw.as_secs();
-        let mtime = crate::png::Chunk::new_text("Thumb::MTime", mtime_raw.to_string()).unwrap();
-        chunks.insert(1, mtime);
+        writer
+            .write_chunk(
+                PNG_TEXT_KIND,
+                &text_chunk("Thumb::MTime", mtime_raw.to_string()).unwrap(),
+            )
+            .map_err(|e| format!("Error writing PNG chunk: {}", e))?;
 
         let size_raw = metadata.len();
-        let size = crate::png::Chunk::new_text("Thumb::Size", size_raw.to_string()).unwrap();
-        chunks.insert(1, size);
-
-        let width = crate::png::Chunk::new_text(
-            "Thumb::Image::Width",
-            thumbnailer.image.as_ref().unwrap().width().to_string(),
-        )
-        .unwrap();
-        chunks.insert(1, width);
-
-        let height = crate::png::Chunk::new_text(
-            "Thumb::Image::Height",
-            thumbnailer.image.as_ref().unwrap().height().to_string(),
-        )
-        .unwrap();
-        chunks.insert(1, height);
-
-        let mut output = std::fs::OpenOptions::new()
-            .write(true)
-            .open(&thumbnailer.temp_path)
-            .map_err(|_e| "Failed to open thumbnailer in temporary dir".to_owned())?;
-        crate::png::Png::encode(&mut output, &chunks).map_err(|e| {
-            error!("Error {:?}", e);
-            "Failed to encode chunks to temporary file"
-        })?;
-
+        writer
+            .write_chunk(
+                PNG_TEXT_KIND,
+                &text_chunk("Thumb::Size", size_raw.to_string()).unwrap(),
+            )
+            .map_err(|e| format!("Error writing PNG chunk: {}", e))?;
+        writer
+            .write_chunk(
+                PNG_TEXT_KIND,
+                &text_chunk(
+                    "Thumb::Image::Width",
+                    thumbnailer.image.as_ref().unwrap().width().to_string(),
+                )
+                .unwrap(),
+            )
+            .map_err(|e| format!("Error writing PNG chunk: {}", e))?;
+        writer
+            .write_chunk(
+                PNG_TEXT_KIND,
+                &text_chunk(
+                    "Thumb::Image::Height",
+                    thumbnailer.image.as_ref().unwrap().height().to_string(),
+                )
+                .unwrap(),
+            )
+            .map_err(|e| format!("Error writing PNG chunk: {}", e))?;
+        writer
+            .write_image_data(&thumbnail.to_bytes())
+            .map_err(|e| format!("Error writing PNG image data: {}", e))?;
         Ok(thumbnailer)
     }
 
     fn move_thumbnail_to_destination(thumbnailer: Thumbnailer) -> Result<(), String> {
-        let r = std::process::Command::new("mv")
-            .arg(&thumbnailer.temp_path.to_str().unwrap())
-            .arg(&thumbnailer.destination_path.to_str().unwrap())
-            .status();
-        if r.is_ok() && r.unwrap().success() {
-            Ok(())
-        } else {
-            Err(format!(
-                "Failed to move from {} to {}",
-                &thumbnailer.temp_path.to_str().unwrap(),
-                &thumbnailer.destination_path.to_str().unwrap()
-            ))
-        }
+        let dst = &thumbnailer.destination_path.to_str().unwrap();
+        let src = &format!("{}.tmp", &dst);
+        std::fs::rename(src, dst)
+            .map_err(|e| format!("Failed to move from {} to {}: {}", src, dst, e))?;
+        Ok(())
     }
 }
 
