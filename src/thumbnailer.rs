@@ -102,7 +102,7 @@ impl Thumbnailer {
 
         assert!(path.is_absolute());
 
-        let path = if use_full_path_for_md5 {
+        if use_full_path_for_md5 {
             let mut encoded = String::new();
 
             for t in path.iter() {
@@ -115,16 +115,14 @@ impl Thumbnailer {
                             .to_string();
                 }
             }
-            encoded
+            format!("file://{}", encoded)
         } else {
             percent_encoding::utf8_percent_encode(
                 path.file_name().unwrap().to_str().unwrap(),
                 USER_INFO_SET,
             )
             .to_string()
-        };
-
-        return "file://".to_owned() + &path;
+        }
     }
 
     pub fn calculate_path_md5(use_full_path_for_md5: bool, path: &PathBuf) -> String {
@@ -295,7 +293,7 @@ mod tests {
         );
         assert_eq!(
             Thumbnailer::calculate_path_md5(false, &path),
-            "c1a0372ebbdd1df67f730201dc10e9d9".to_owned()
+            "7accaff1d29c5d074218919d4150d1e5".to_owned()
         );
     }
 
