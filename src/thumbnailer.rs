@@ -329,6 +329,41 @@ mod tests {
     }
 
     #[test]
+    fn test_exotic_encodings() {
+        let with_space = Path::new("/home/jens/my photos/hello world.png").to_owned();
+        assert_eq!(
+            Thumbnailer::calculate_path_uri(true, &with_space),
+            "file:///home/jens/my%20photos/hello%20world.png"
+        );
+        assert_eq!(
+            Thumbnailer::calculate_path_uri(false, &with_space),
+            "hello%20world.png"
+        );
+
+        let with_colon = Path::new("/home/jens/hello:world.png").to_owned();
+        assert_eq!(
+            Thumbnailer::calculate_path_uri(true, &with_colon),
+            "file:///home/jens/hello:world.png"
+        );
+        assert_eq!(
+            Thumbnailer::calculate_path_uri(false, &with_colon),
+            "./hello:world.png"
+        );
+
+        // Tests both for some that should be escaped, and for whether capitalization of the
+        // percent encoding is upper case
+        let some_other_odd = Path::new("/home/jens/hello[w]orld-percent%sign-question?mark.png").to_owned();
+        assert_eq!(
+            Thumbnailer::calculate_path_uri(true, &some_other_odd),
+            "file:///home/jens/hello%5Bw%5Dorld-percent%25sign-question%3Fmark.png"
+        );
+        assert_eq!(
+            Thumbnailer::calculate_path_uri(false, &some_other_odd),
+            "hello%5Bw%5Dorld-percent%25sign-question%3Fmark.png"
+        );
+    }
+
+    #[test]
     fn test_new() {
         let input_path = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
             .join("test_resources")
