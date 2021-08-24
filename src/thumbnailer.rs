@@ -155,14 +155,19 @@ impl Thumbnailer {
             }
             format!("file://{}", encoded)
         } else {
-            percent_encoding::utf8_percent_encode(
+            let segment = percent_encoding::utf8_percent_encode(
                 path.file_name().unwrap().to_str().unwrap(),
                 // Could just as well pick pchar, and while arguably it'd be more correct, no need
                 // to lug around two tables as practically the path is guaranteed not to contain a
                 // slash.
                 &PATH_TO_FILEURI,
-            )
-            .to_string()
+            ).to_string();
+
+            if segment.contains(':') {
+                format!("./{}", segment)
+            } else {
+                segment
+            }
         }
     }
 
