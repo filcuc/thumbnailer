@@ -15,7 +15,7 @@
 */
 use image::GenericImageView;
 use log::debug;
-use percent_encoding::{AsciiSet, CONTROLS};
+use percent_encoding::{AsciiSet, NON_ALPHANUMERIC};
 use std::ffi::OsStr;
 use std::fs::File;
 use std::io::BufReader;
@@ -111,19 +111,32 @@ impl Thumbnailer {
     }
 
     fn calculate_path_uri(use_full_path_for_md5: bool, path: &PathBuf) -> String {
-        const FRAGMENT: &AsciiSet = &CONTROLS.add(b' ').add(b'"').add(b'<').add(b'>').add(b'`');
-        const PATH_SET: &AsciiSet = &FRAGMENT.add(b'#').add(b'?').add(b'{').add(b'}');
-        const USER_INFO_SET: &AsciiSet = &PATH_SET
-            .add(b'/')
-            .add(b':')
-            .add(b';')
-            .add(b'=')
-            .add(b'@')
-            .add(b'[')
-            .add(b'\\')
-            .add(b']')
-            .add(b'^')
-            .add(b'|');
+        /// The characters that need to be escaped to minimally obtain the `pchar` production of
+        /// RFC3986
+        const PCHAR: AsciiSet = NON_ALPHANUMERIC
+            // Allow the (still missing) non-alphanumeric parts from `unreserved`
+            .remove(b'-')
+            .remove(b'.')
+            .remove(b'_')
+            .remove(b'~')
+            // Nothing to do for `pct-encoded`, these are the remaining characters.
+            // Allow `sub-delims`
+            .remove(b'!')
+            .remove(b'$')
+            .remove(b'&')
+            .remove(b'\'')
+            .remove(b'(')
+            .remove(b')')
+            .remove(b'*')
+            .remove(b'+')
+            .remove(b',')
+            .remove(b';')
+            .remove(b'=')
+            // Allow the explicitly allowed characters
+            .remove(b':')
+            .remove(b'@')
+            ;
+        const PATH_TO_FILEURI: AsciiSet = PCHAR.remove(b'/');
 
         assert!(path.is_absolute());
 
@@ -136,7 +149,7 @@ impl Thumbnailer {
                 } else {
                     encoded.push(std::path::MAIN_SEPARATOR);
                     encoded +=
-                        &percent_encoding::utf8_percent_encode(t.to_str().unwrap(), USER_INFO_SET)
+                        &percent_encoding::utf8_percent_encode(t.to_str().unwrap(), &PATH_TO_FILEURI)
                             .to_string();
                 }
             }
@@ -144,7 +157,10 @@ impl Thumbnailer {
         } else {
             percent_encoding::utf8_percent_encode(
                 path.file_name().unwrap().to_str().unwrap(),
-                USER_INFO_SET,
+                // Could just as well pick pchar, and while arguably it'd be more correct, no need
+                // to lug around two tables as practically the path is guaranteed not to contain a
+                // slash.
+                &PATH_TO_FILEURI,
             )
             .to_string()
         }
