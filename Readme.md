@@ -46,3 +46,6 @@ Options:
 ```shell script
 cargo build --release
 ```
+
+## See also
+* [genthumbs](https://github.com/jesjimher/genthumbs) a shell script to generate the .sh_thumbnails with ImageMagic
